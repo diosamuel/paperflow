@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
 
-from gemini_service import call_gemini_vision
+from gemini_service import callGeminiVision
 
 load_dotenv()
 
@@ -26,7 +26,7 @@ app.add_middleware(
 
 
 @app.get("/")
-def root():
+def getRoot():
     return {
         "message": "Welcome to PaperFlow Vision API",
         "docs_url": "/docs",
@@ -35,7 +35,7 @@ def root():
 
 
 @app.get("/health")
-def health():
+def getHealth():
     gemini_key_set = bool(os.getenv("GEMINI_API_KEY") and os.getenv("GEMINI_API_KEY") != "your_gemini_api_key_here")
     return {
         "status": "healthy",
@@ -44,8 +44,18 @@ def health():
     }
 
 
+@app.get("/iot")
+def getIotData():
+    """Placeholder endpoint to receive or query data from Raspberry Pi."""
+    return {
+        "status": "success",
+        "message": "IoT endpoint ready for Raspberry Pi integration",
+        "data": {},
+    }
+
+
 @app.post("/upload")
-async def upload_image(
+async def uploadImage(
     file: UploadFile = File(..., description="Image file to analyze"),
     prompt: Optional[str] = Form(
         None,
@@ -66,7 +76,7 @@ async def upload_image(
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
         # Pass image to Gemini Vision API
-        response_text = call_gemini_vision(
+        response_text = callGeminiVision(
             image_bytes=image_bytes,
             mime_type=file.content_type,
             prompt=prompt,

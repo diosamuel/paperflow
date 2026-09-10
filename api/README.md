@@ -87,6 +87,9 @@ curl -X POST "http://localhost:8000/upload" \
 ### 2. `GET /health`
 Health check endpoint reporting configuration status.
 
-### 3. Interactive Swagger UI
+### 3. `GET /iot`
+Placeholder endpoint to receive or query sensor/telemetry data from Raspberry Pi.
+
+### 4. Interactive Swagger UI
 Open your browser at:
 `http://localhost:8000/docs`

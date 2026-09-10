@@ -8,12 +8,12 @@ load_dotenv()
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 
-def call_gemini_vision(
-    image_bytes: bytes,
-    mime_type: str = "image/png",
-    prompt: Optional[str] = None,
-    model_name: Optional[str] = None,
-) -> str:
+def callGeminiVision(
+    image_bytes,
+    mime_type="image/png",
+    prompt=None,
+    model_name=None,
+):
     """Send an image to Gemini Vision API and return the text response.
 
     Supports both 'google-genai' (recommended) and 'google-generativeai'.

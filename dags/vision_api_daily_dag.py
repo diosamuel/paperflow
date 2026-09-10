@@ -23,7 +23,7 @@ DEFAULT_BASE_URLS = [
 logger = logging.getLogger(__name__)
 
 
-def find_active_api_url() -> str:
+def findActiveApiUrl():
     """Finds the first reachable FastAPI service URL."""
     for url in DEFAULT_BASE_URLS:
         if not url:
@@ -53,16 +53,16 @@ def find_active_api_url() -> str:
     },
     tags=["vision", "fastapi", "gemini", "daily"],
 )
-def daily_vision_api_dag():
+def dailyVisionApiDag():
 
     @task
-    def check_api_health() -> str:
+    def checkApiHealth():
         """Task 1: Verify the FastAPI service is alive and healthy."""
-        api_url = find_active_api_url()
-        health_endpoint = f"{api_url}/health"
+        apiUrl = findActiveApiUrl()
+        healthEndpoint = f"{apiUrl}/health"
 
-        logger.info(f"Checking health at {health_endpoint}...")
-        response = requests.get(health_endpoint, timeout=10)
+        logger.info(f"Checking health at {healthEndpoint}...")
+        response = requests.get(healthEndpoint, timeout=10)
         response.raise_for_status()
 
         data = response.json()
@@ -74,23 +74,23 @@ def daily_vision_api_dag():
                 "Make sure to set GEMINI_API_KEY in api/.env"
             )
 
-        return api_url
+        return apiUrl
 
     @task
-    def upload_image_to_gemini(base_url: str) -> dict:
+    def uploadImageToGemini(baseUrl):
         """Task 2: Send sample image to FastAPI /upload endpoint."""
-        upload_endpoint = f"{base_url}/upload"
+        uploadEndpoint = f"{baseUrl}/upload"
 
         # Search for sample image inside container or host filesystem
-        possible_paths = [
+        possiblePaths = [
             Path("/opt/airflow/dags/sample_images/sample_drawing.png"),
             Path(__file__).parent / "sample_images" / "sample_drawing.png",
         ]
 
-        image_path = None
-        for p in possible_paths:
+        imagePath = None
+        for p in possiblePaths:
             if p.exists():
-                image_path = p
+                imagePath = p
                 break
 
         prompt = (
@@ -98,24 +98,24 @@ def daily_vision_api_dag():
             "connections, and overall pipeline structure."
         )
 
-        if image_path:
-            logger.info(f"Uploading image from: {image_path}")
-            with open(image_path, "rb") as f:
-                files = {"file": (image_path.name, f.read(), "image/png")}
+        if imagePath:
+            logger.info(f"Uploading image from: {imagePath}")
+            with open(imagePath, "rb") as f:
+                files = {"file": (imagePath.name, f.read(), "image/png")}
         else:
             logger.info("Sample image not found on disk, creating 1x1 test PNG in-memory...")
             # 1x1 transparent PNG fallback bytes
-            dummy_png = (
+            dummyPng = (
                 b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
                 b"\x08\x06\x00\x00\x00\x1f\x15c4\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05"
                 b"\x00\x01\r\n-\xb4\x00\x00\x00\x00IEND\xaeB`\x82"
             )
-            files = {"file": ("test_diagram.png", dummy_png, "image/png")}
+            files = {"file": ("test_diagram.png", dummyPng, "image/png")}
 
         data = {"prompt": prompt}
 
-        logger.info(f"Sending POST request to {upload_endpoint}...")
-        response = requests.post(upload_endpoint, files=files, data=data, timeout=60)
+        logger.info(f"Sending POST request to {uploadEndpoint}...")
+        response = requests.post(uploadEndpoint, files=files, data=data, timeout=60)
         response.raise_for_status()
 
         result = response.json()
@@ -124,7 +124,7 @@ def daily_vision_api_dag():
         return result
 
     @task
-    def log_summary(result: dict):
+    def logSummary(result):
         """Task 3: Log a clean summary of the execution."""
         logger.info("=" * 50)
         logger.info("DAILY GEMINI VISION TASK SUMMARY")
@@ -135,9 +135,9 @@ def daily_vision_api_dag():
         logger.info("=" * 50)
 
     # Pipeline definition
-    active_url = check_api_health()
-    vision_result = upload_image_to_gemini(active_url)
-    log_summary(vision_result)
+    activeUrl = checkApiHealth()
+    visionResult = uploadImageToGemini(activeUrl)
+    logSummary(visionResult)
 
 
-daily_vision_dag = daily_vision_api_dag()
+dailyVisionDag = dailyVisionApiDag()
