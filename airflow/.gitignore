@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.py[cod]
+
+airflow.cfg
+airflow.db
+airflow.db-shm
+airflow.db-wal
+webserver_config.py
+simple_auth_manager_passwords.json.generated
+
+logs/
+*.log
+
+.env

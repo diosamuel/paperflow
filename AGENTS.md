@@ -26,13 +26,12 @@ The generated workflow is meant to run in Airflow and eventually drive
 **Raspberry Pi** sensors (temperature, humidity, soil) and LEDs
 (red / blue / green).
 
-> ⚠️ **The Airflow layer is not in this repository right now.** The Docker Compose
-> stack (`docker-compose.yaml`) plus `config/`, `dags/`, `plugins/`, and `logs/`
-> were deliberately removed — including the `vision_api_daily_dag.py` DAG and its
-> sample drawing. Only the frontend (`ui/`) and the vision API (`api/`) remain.
-> Airflow orchestration is still the goal (see `PLAN.md`), but it must be
-> **(re)built from scratch**; do not assume any DAG, compose file, or Airflow
-> config exists.
+> ⚠️ **Airflow is local-only and minimal.** The old Docker Compose stack was
+> deleted and is **not** how Airflow runs anymore. Orchestration now lives in
+> `airflow/` as a `uv`-managed Airflow 3.3.2 project (LocalExecutor + SQLite) —
+> no containers, no Postgres. It holds a single mock DAG
+> (`airflow/dags/paperflow_dag.py`); there is still **no IR → DAG generator** and
+> nothing bridging the UI to Airflow.
 
 ---
 
@@ -67,6 +66,13 @@ paperflow/
 │   └── public/                    # img assets served at "/"
 │       ├── temp-sensor.png  humid-sensor.png  soil-sensor.png
 │       └── red-led.png      blue-led.png      green-led.png
+├── airflow/                # uv-managed Airflow 3.3.2 (LocalExecutor + SQLite)
+│   ├── pyproject.toml      # dependencies: apache-airflow==3.3.2
+│   ├── uv.lock             # resolved/pinned environment
+│   ├── constraints.txt     # official constraints-3.3.2 for py3.12
+│   ├── .python-version     # 3.12
+│   ├── dags/paperflow_dag.py  # mock sensor → rule → branch DAG
+│   └── README.md           # setup/run commands
 ├── graphify-out/           # generated code-graph output (untracked artifact)
 ├── AGENTS.md               # this file
 ├── DESIGN.md               # token palette + landing-page spec
@@ -78,8 +84,8 @@ paperflow/
 > ⚠️ `PLAN.md` is listed in `.gitignore`. Do **not** overwrite it destructively;
 > it holds the full product plan. Append or update in place.
 
-> ⚠️ There is **no `dags/` directory**. If you add an Airflow DAG (or any orchestration
-> layer), you are creating that structure, not extending an existing one.
+> ⚠️ `dags/` exists **only inside `airflow/`** (`airflow/dags/`). There is no
+> repo-root `dags/`, and no Docker Compose stack — do not reintroduce one.
 
 ---
 
@@ -113,9 +119,22 @@ Interactive docs: `http://localhost:8000/docs`. Endpoints: `GET /` (welcome),
 model), `POST /upload` (multipart `file`, optional `prompt` form field),
 `GET /iot` (placeholder).
 
-### Airflow
+### Airflow — `airflow/`
 
-Not runnable from this repo — no compose file, config, or DAGs. See §1 and §9.
+`uv`-managed Airflow 3.3.2 on SQLite with LocalExecutor. This directory **is**
+`AIRFLOW_HOME`, so export it before every command:
+
+```bash
+cd airflow
+uv sync                       # create/refresh .venv from uv.lock
+
+export AIRFLOW_HOME="$PWD"
+uv run airflow db migrate     # initialise/upgrade the SQLite metadata DB
+uv run airflow standalone     # UI + scheduler + dag-processor; prints admin password
+```
+
+UI: `http://localhost:8080`. To verify a DAG change end-to-end:
+`uv run airflow dags test paperflow_demo 2025-01-01`.
 
 ---
 
@@ -214,6 +233,19 @@ GitHub"), and scattered sticky-note dots in brand colors (desktop only).
   (e.g. `Order.FUNCTION_CALL`), not `generator.ORDER_*`. Use
   `pythonGenerator.provideFunction_(name, codeLines)` to emit helper function
   definitions (like `read_humidity`) alongside generated code.
+- **Airflow lives in `airflow/` and is uv-managed**: `export AIRFLOW_HOME="$PWD"`
+  from inside that directory before any `airflow` command. `airflow.cfg`,
+  `airflow.db`, and `logs/` are generated there and gitignored — `airflow.cfg`
+  embeds an absolute `dags_folder`, so it must never be committed.
+- **`airflow dags list` reads the DB, not the folder.** The dag-processor
+  serializes DAGs, so without `airflow standalone` running the list is empty even
+  though `DagBag` can happily parse the file.
+- **Airflow 3 TaskFlow imports come from `airflow.sdk`** —
+  `from airflow.sdk import dag, task`. `airflow.decorators` still works but emits
+  deprecation warnings.
+- **Pass `-c constraints.txt` when adding Airflow dependencies**
+  (`uv add -c constraints.txt ...`), or the environment drifts off the tested
+  Airflow 3.3.2 release.
 - **Root `.env` is a leftover** (`AIRFLOW_UID=1000`) from the removed compose
   stack; nothing reads it now. It is gitignored, so it is safe to delete.
 - The repo has been through a teardown: `graphify-out/` is a generated artifact,
@@ -228,10 +260,11 @@ GitHub"), and scattered sticky-note dots in brand colors (desktop only).
 | Add a hardware component (new sensor/LED) | Drop PNG in `ui/public/`, add to `AVAILABLE_IMAGES` in `ui/src/pages/Builder.tsx` |
 | New custom node look/behavior | `ui/src/nodes/*.tsx` |
 | New Blockly block / category | `ui/src/blocks/*.ts` (register block + `pythonGenerator.forBlock`), then add to the toolbox in `ui/src/components/BlocklyEditor.tsx` |
-| Blocks → Airflow tasks | ⚠️ No DAG layer exists — this is greenfield. Follow the Workflow IR in `PLAN.md` Part I §4/§8 and build the generator |
-| Run/trigger a DAG from the UI | Not available; would require restoring an Airflow deployment and calling its API |
+| Blocks → Airflow tasks | Greenfield: build the IR → DAG generator (`PLAN.md` Part I §4/§8), writing into `airflow/dags/` |
+| Add / edit a DAG | `airflow/dags/*.py` — Airflow 3 TaskFlow (`airflow.sdk`), camelCase names |
+| Run/trigger a DAG from the UI | Airflow API at `http://localhost:8080` while `airflow standalone` runs |
 | Raspberry Pi telemetry / actuators | `api/main.py` `GET /iot`; MQTT topics in `PLAN.md` §9 |
-| Paper-recognition path | `api/` (Gemini Vision). The old `dags/vision_api_daily_dag.py` consumer is gone — it would have to be rewritten |
+| Paper-recognition path | `api/` (Gemini Vision) — no DAG consumes it yet; that consumer still has to be written |
 
 ---
 
@@ -239,10 +272,11 @@ GitHub"), and scattered sticky-note dots in brand colors (desktop only).
 
 - **UI:** `cd ui && npm run lint && npm run build`.
 - **API:** start it, then `curl http://localhost:8000/health`.
+- **Airflow:** `cd airflow && export AIRFLOW_HOME="$PWD"`, then
+  `uv run airflow dags test paperflow_demo 2025-01-01`.
 
-There is **no Airflow check** — the stack is gone. There are currently
-**no automated tests** (no `tests/` yet). Prefer adding pytest tests for Python
-logic and, if UI logic grows, a test runner for `ui/`.
+There are currently **no automated tests** (no `tests/` yet). Prefer adding
+pytest tests for Python logic and, if UI logic grows, a test runner for `ui/`.
 
 ---
 
@@ -250,18 +284,19 @@ logic and, if UI logic grows, a test runner for `ui/`.
 
 **Done:** FastAPI vision service (`api/`); `ui/` Notion-style landing page;
 React Flow canvas with custom nodes, dedupe, dark mode, resizable splits;
-Blockly → Python output.
+Blockly → Python output; local Airflow 3.3.2 project in `airflow/` (uv-managed,
+LocalExecutor + SQLite) with a verified mock branch DAG.
 
-**Removed (and must be rebuilt if needed):** the entire Airflow layer —
-`docker-compose.yaml` (Airflow 3.3.1 + PostgreSQL 16, LocalExecutor),
-`config/airflow.cfg`, `dags/vision_api_daily_dag.py`, `dags/sample_images/`,
-`plugins/`, and `logs/`. The `apache/airflow:3.3.1` image and the
-`paperflow_postgres-db-volume` were deleted too. History is still in git
-(`b66541a` added the API and DAGs) if anything needs recovering.
+**Removed — do not resurrect:** the old Docker Compose stack
+(`docker-compose.yaml`: Airflow 3.3.1 + PostgreSQL 16) along with `config/`,
+repo-root `dags/`, `plugins/`, and `logs/`. The `apache/airflow:3.3.1` image and
+`paperflow_postgres-db-volume` were deleted too. Superseded by `airflow/`;
+history is in git (`b66541a`) if the old `vision_api_daily_dag.py` is needed.
 
 **Missing / next:**
-- No orchestration layer at all: no compose file, no DAGs, no DAG generator.
-- No bridge from the UI canvas/Blockly output to Airflow (IR + DAG generator).
+- No IR → DAG generator: nothing bridges the UI canvas/Blockly output to Airflow.
+- `airflow/dags/paperflow_dag.py` is a self-contained mock; `PLAN.md` Phase 1
+  will move that logic into `src/paperflow/`.
 - Blockly toolbox is minimal; not yet mapped to Airflow task types.
 - Raspberry Pi integration is a placeholder (`GET /iot`), no MQTT broker yet.
 - `src/paperflow/` (rules, sensors, IR, generator) from `PLAN.md` Part I is not
