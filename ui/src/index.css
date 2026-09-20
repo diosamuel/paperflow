@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
+    sans-serif;
+
+  --color-primary: #5645d4;
+  --color-primary-pressed: #4534b3;
+  --color-primary-deep: #3a2a99;
+
+  --color-brand-navy: #0a1530;
+  --color-brand-navy-deep: #070f24;
+  --color-brand-navy-mid: #1a2a52;
+
+  --color-brand-pink: #ff64c8;
+  --color-brand-orange: #dd5b00;
+  --color-brand-purple: #7b3ff2;
+  --color-brand-purple-300: #d6b6f6;
+  --color-brand-teal: #2a9d99;
+  --color-brand-green: #1aae39;
+  --color-brand-yellow: #f5d75e;
+
+  --color-canvas: #ffffff;
+  --color-surface: #f6f5f4;
+
+  --color-ink: #1a1a1a;
+  --color-charcoal: #37352f;
+  --color-slate: #5d5b54;
+  --color-steel: #787671;
+
+  --color-hairline: #e5e3df;
+  --color-hairline-strong: #c8c4be;
+
+  --color-on-dark: #ffffff;
+  --color-on-dark-muted: #a4a097;
+}
+
+.dark .react-flow__controls-button {
+  background: #1f2937;
+  border-bottom-color: #374151;
+  fill: #e5e7eb;
+}
+
+.dark .react-flow__controls-button:hover {
+  background: #374151;
+}
+
+.dark .react-flow__minimap-mask {
+  fill: rgba(17, 24, 39, 0.7);
+}
+
+.dark .react-flow__attribution {
+  background: rgba(31, 41, 55, 0.8);
+}
+
+.dark .react-flow__attribution a {
+  color: #9ca3af;
+}
