@@ -36,12 +36,12 @@ const nodeTypes = { card: CardNode, image: ImageNode }
 const COLUMN_GAP = 240
 
 const AVAILABLE_IMAGES = [
-  { src: '/temp-sensor.png', label: 'Temp Sensor' },
-  { src: '/humid-sensor.png', label: 'Humid Sensor' },
-  { src: '/soil-sensor.png', label: 'Soil Sensor' },
-  { src: '/red-led.png', label: 'Red LED' },
-  { src: '/blue-led.png', label: 'Blue LED' },
-  { src: '/green-led.png', label: 'Green LED' },
+  { src: 'temp-sensor.png', label: 'Temp Sensor' },
+  { src: 'humid-sensor.png', label: 'Humid Sensor' },
+  { src: 'soil-sensor.png', label: 'Soil Sensor' },
+  { src: 'red-led.png', label: 'Red LED' },
+  { src: 'blue-led.png', label: 'Blue LED' },
+  { src: 'green-led.png', label: 'Green LED' },
 ]
 
 const initialNodes: Node[] = [
@@ -49,14 +49,14 @@ const initialNodes: Node[] = [
     id: 'temp-sensor',
     type: 'image',
     position: { x: 0, y: 0 },
-    data: { src: '/temp-sensor.png', alt: 'Temp Sensor', label: 'Temp Sensor' },
+    data: { src: 'temp-sensor.png', alt: 'Temp Sensor', label: 'Temp Sensor' },
   } satisfies ImageNodeType,
   {
     id: 'humid-sensor',
     type: 'image',
     position: { x: 0, y: COLUMN_GAP },
     data: {
-      src: '/humid-sensor.png',
+      src: 'humid-sensor.png',
       alt: 'Humid Sensor',
       label: 'Humid Sensor',
     },
@@ -65,25 +65,25 @@ const initialNodes: Node[] = [
     id: 'soil-sensor',
     type: 'image',
     position: { x: 0, y: COLUMN_GAP * 2 },
-    data: { src: '/soil-sensor.png', alt: 'Soil Sensor', label: 'Soil Sensor' },
+    data: { src: 'soil-sensor.png', alt: 'Soil Sensor', label: 'Soil Sensor' },
   } satisfies ImageNodeType,
   {
     id: 'red-led',
     type: 'image',
     position: { x: 360, y: 0 },
-    data: { src: '/red-led.png', alt: 'Red LED', label: 'Red LED' },
+    data: { src: 'red-led.png', alt: 'Red LED', label: 'Red LED' },
   } satisfies ImageNodeType,
   {
     id: 'blue-led',
     type: 'image',
     position: { x: 360, y: COLUMN_GAP },
-    data: { src: '/blue-led.png', alt: 'Blue LED', label: 'Blue LED' },
+    data: { src: 'blue-led.png', alt: 'Blue LED', label: 'Blue LED' },
   } satisfies ImageNodeType,
   {
     id: 'green-led',
     type: 'image',
     position: { x: 360, y: COLUMN_GAP * 2 },
-    data: { src: '/green-led.png', alt: 'Green LED', label: 'Green LED' },
+    data: { src: 'green-led.png', alt: 'Green LED', label: 'Green LED' },
   } satisfies ImageNodeType,
 ]
 

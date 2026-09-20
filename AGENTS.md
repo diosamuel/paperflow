@@ -16,9 +16,9 @@ Motto: **"Draw it. Airflow runs it. The physical world responds."**
 There are two kid-facing ways to build a workflow. Both are intended to converge
 on the **same Intermediate Representation (IR)** and therefore the same Airflow DAG:
 
-1. **Visual builder (primary, `ui/`)** — a React Flow canvas where sensor/LED/card
-   nodes are placed and connected into a DAG, plus a Blockly editor that turns
-   blocks into **Python** code.
+1. **Visual builder (primary, `airflow/plugins/paperflow/ui/`)** — a React Flow
+   canvas where sensor/LED/card nodes are placed and connected into a DAG, plus a
+   Blockly editor that turns blocks into **Python** code.
 2. **Paper + Gemini vision (`api/`)** — a photo of a drawn paper template is
    analyzed by Gemini Vision to extract a workflow.
 
@@ -30,8 +30,8 @@ The generated workflow is meant to run in Airflow and eventually drive
 > deleted and is **not** how Airflow runs anymore. Orchestration now lives in
 > `airflow/` as a `uv`-managed Airflow 3.3.2 project (LocalExecutor + SQLite) —
 > no containers, no Postgres. It holds a single mock DAG
-> (`airflow/dags/paperflow_dag.py`); there is still **no IR → DAG generator** and
-> nothing bridging the UI to Airflow.
+> (`airflow/dags/paperflow_dag.py`) plus the `paperflow` plugin that serves the
+> builder UI at `/paperflow/`. There is still **no IR → DAG generator**.
 
 ---
 
@@ -45,34 +45,30 @@ paperflow/
 │   ├── requirements.txt
 │   ├── README.md
 │   └── .env.example
-├── ui/                     # Vite 8 + React 19 + TS + Tailwind v4 frontend
-│   ├── src/
-│   │   ├── App.tsx             # router: `/` landing, `/builder` (lazy-loaded)
-│   │   ├── pages/
-│   │   │   ├── Landing.tsx     # Notion-style jumbotron hero (see DESIGN.md)
-│   │   │   └── Builder.tsx     # split view: React Flow (top) + Blockly (bottom)
-│   │   │                       #   + AVAILABLE_IMAGES palette
-│   │   ├── blocks/
-│   │   │   ├── createVariable.ts # custom "Create Variable" block + Python gen
-│   │   │   └── humiditySensor.ts # custom "Humidity Sensor" block + Python gen
-│   │   ├── components/
-│   │   │   └── BlocklyEditor.tsx  # Blockly workspace + Python output
-│   │   ├── nodes/
-│   │   │   ├── CardNode.tsx       # generic labeled node
-│   │   │   └── ImageNode.tsx      # image node (sensors / LEDs)
-│   │   ├── assets/                # paperflow.svg, vite.svg
-│   │   ├── index.css              # Tailwind import + dark variant + Notion tokens
-│   │   └── main.tsx
-│   └── public/                    # img assets served at "/"
-│       ├── temp-sensor.png  humid-sensor.png  soil-sensor.png
-│       └── red-led.png      blue-led.png      green-led.png
 ├── airflow/                # uv-managed Airflow 3.3.2 (LocalExecutor + SQLite)
 │   ├── pyproject.toml      # dependencies: apache-airflow==3.3.2
 │   ├── uv.lock             # resolved/pinned environment
 │   ├── constraints.txt     # official constraints-3.3.2 for py3.12
 │   ├── .python-version     # 3.12
-│   ├── dags/paperflow_dag.py  # mock sensor → rule → branch DAG
-│   └── README.md           # setup/run commands
+│   ├── README.md           # setup/run commands
+│   ├── dags/paperflow_dag.py   # mock sensor → rule → branch DAG
+│   └── plugins/
+│       ├── .airflowignore      # prunes node_modules/dist from plugin scan
+│       └── paperflow/
+│           ├── paperflow.py    # AirflowPlugin: serves UI at /paperflow/
+│           └── ui/             # Vite 8 + React 19 + TS + Tailwind v4
+│               ├── index.html
+│               ├── vite.config.ts   # base './', outDir dist
+│               ├── src/
+│               │   ├── main.tsx            # renders Builder directly
+│               │   ├── pages/Builder.tsx   # React Flow + Blockly split view
+│               │   ├── blocks/             # custom blocks + Python generators
+│               │   ├── components/BlocklyEditor.tsx
+│               │   ├── nodes/              # CardNode.tsx, ImageNode.tsx
+│               │   ├── index.css           # Tailwind + Notion tokens
+│               │   └── assets/
+│               ├── public/     # sensor/LED PNGs, favicon, icons.svg
+│               └── dist/       # build output — gitignored
 ├── graphify-out/           # generated code-graph output (untracked artifact)
 ├── AGENTS.md               # this file
 ├── DESIGN.md               # token palette + landing-page spec
@@ -84,25 +80,30 @@ paperflow/
 > ⚠️ `PLAN.md` is listed in `.gitignore`. Do **not** overwrite it destructively;
 > it holds the full product plan. Append or update in place.
 
-> ⚠️ `dags/` exists **only inside `airflow/`** (`airflow/dags/`). There is no
-> repo-root `dags/`, and no Docker Compose stack — do not reintroduce one.
+> ⚠️ `dags/` and the builder UI both live **inside `airflow/`** —
+> `airflow/dags/` and `airflow/plugins/paperflow/ui/`. There is no repo-root
+> `dags/` or `ui/`, and no Docker Compose stack — do not reintroduce one.
 
 ---
 
 ## 3. Running Things
 
-### Frontend — `ui/`
+### Builder UI — `airflow/plugins/paperflow/ui/`
+
+The UI ships as an Airflow plugin, so Airflow serves the **built** bundle, not
+the sources. To work on it in isolation:
 
 ```bash
-cd ui
+cd airflow/plugins/paperflow/ui
 npm install
 npm run dev        # http://localhost:5173
 npm run lint       # oxlint
 npm run build      # tsc -b && vite build
-npm run preview    # preview production build
 ```
 
-**Always run `npm run lint` and `npm run build` before considering UI work done.**
+**Always run `npm run lint` and `npm run build` before considering UI work
+done** — editing `src/` alone changes nothing until you rebuild and restart
+Airflow.
 
 ### Vision API — `api/`
 
@@ -133,28 +134,25 @@ uv run airflow db migrate     # initialise/upgrade the SQLite metadata DB
 uv run airflow standalone     # UI + scheduler + dag-processor; prints admin password
 ```
 
-UI: `http://localhost:8080`. To verify a DAG change end-to-end:
+Airflow UI: `http://localhost:8080`; the builder is served by the plugin at
+**`http://localhost:8080/paperflow/`** (also linked in the Airflow nav). To
+verify a DAG change end-to-end:
 `uv run airflow dags test paperflow_demo 2025-01-01`.
 
 ---
 
-## 4. Frontend Architecture (`ui/`) — Read Before Editing
+## 4. Builder UI (`airflow/plugins/paperflow/ui/`) — Read Before Editing
+
+The builder is an Airflow **plugin**, not a standalone site: Vite builds it and
+`plugins/paperflow/paperflow.py` serves `dist/` at `/paperflow/`.
 
 **Stack:** Vite 8, React 19, TypeScript 6, Tailwind CSS v4 (via
-`@tailwindcss/vite`), `@xyflow/react` (React Flow v12), `blockly` v13,
-`react-router-dom`, oxlint.
+`@tailwindcss/vite`), `@xyflow/react` (React Flow v12), `blockly` v13, oxlint.
+There is **no router** — `src/main.tsx` renders `pages/Builder.tsx` directly. (A
+react-router landing page existed before the move into the plugin and was
+dropped; `DESIGN.md` still specifies it if it is ever restored.)
 
-**`src/App.tsx`** — route shell only. `BrowserRouter` with two routes:
-`/` → `pages/Landing.tsx`, `/builder` → `pages/Builder.tsx` loaded via
-`React.lazy` so the ~1 MB Blockly bundle never blocks the landing page.
-
-**`src/pages/Landing.tsx`** — a single Notion-style jumbotron following
-`DESIGN.md`: deep navy hero band (`bg-brand-navy`), centered hero-display
-headline (responsive 36 → 48 → 56 → 80 px), purple primary CTA
-("Start building" → `/builder`), outlined secondary-on-dark ("View on
-GitHub"), and scattered sticky-note dots in brand colors (desktop only).
-
-**`src/pages/Builder.tsx`** — formerly `App.tsx`; unchanged in behavior:
+**`src/pages/Builder.tsx`**:
 - A vertical split: React Flow canvas on top, Blockly editor on the bottom,
   separated by a draggable splitter that resizes the Blockly pane (clamped).
 - A React Flow `<Panel position="top-left">` control panel containing:
@@ -206,9 +204,10 @@ GitHub"), and scattered sticky-note dots in brand colors (desktop only).
 - Match existing file/component patterns; prefer small, typed components.
 - **No code comments unless requested.**
 - Keep user-facing copy simple and kid-friendly.
-- Public images are plain `<img src="/name.png">` (absolute URL from `public/`),
-  not imports. Node images are declared in `AVAILABLE_IMAGES` in
-  `ui/src/pages/Builder.tsx`.
+- Public images are plain **relative** URLs from `public/` — `temp-sensor.png`,
+  **no leading slash**, or they 404 under the `/paperflow/` plugin subpath. Node
+  images are declared in `AVAILABLE_IMAGES` in
+  `airflow/plugins/paperflow/ui/src/pages/Builder.tsx`.
 - `api/` is deliberately flat (no package): `main.py` imports `gemini_service`
   directly, so run it from inside `api/`.
 
@@ -216,10 +215,21 @@ GitHub"), and scattered sticky-note dots in brand colors (desktop only).
 
 ## 6. Known Gotchas
 
-- **Blockly is large** (~1.1 MB minified); it is isolated in the
-  `/builder` route via `React.lazy`, so the landing page stays light
-  (262 kB gzipped 84 kB). The build still prints a chunk-size warning for the
-  Builder chunk — expected.
+- **Blockly is large** (~1.4 MB minified, ~400 kB gzipped) and is now the whole
+  app, so the build always prints a chunk-size warning — expected.
+- **The plugin serves a prebuilt bundle**: editing anything under
+  `plugins/paperflow/ui/src` does nothing until you re-run `npm run build` and
+  restart Airflow. With no `dist/`, `/paperflow/` returns HTTP 404 plus a build
+  hint.
+- **Keep asset URLs relative.** `vite.config.ts` sets `base: './'` and images are
+  referenced without a leading slash, so everything resolves under `/paperflow/`.
+  A leading `/` points at Airflow's own root and 404s.
+- **`plugins/.airflowignore` is load-bearing**: Airflow's plugin loader walks the
+  plugins folder, and without that file it descends into `node_modules/`
+  (~4.7k files), roughly doubling CLI/startup time.
+- **Plugin FastAPI routes are not authenticated by Airflow** (per the official
+  docs) — whatever a plugin mounts is reachable anonymously. Fine for local
+  teaching use; not something to expose publicly as-is.
 - React Flow ignores `Backspace`/`Delete` while focus is in an input, so the
   card-text field is safe; `deleteKeyCode={['Backspace', 'Delete']}` is set.
 - Images must be referenced by URL from `public/`; putting them in `src/assets`
@@ -257,9 +267,10 @@ GitHub"), and scattered sticky-note dots in brand colors (desktop only).
 
 | Goal | Where |
 |------|-------|
-| Add a hardware component (new sensor/LED) | Drop PNG in `ui/public/`, add to `AVAILABLE_IMAGES` in `ui/src/pages/Builder.tsx` |
-| New custom node look/behavior | `ui/src/nodes/*.tsx` |
-| New Blockly block / category | `ui/src/blocks/*.ts` (register block + `pythonGenerator.forBlock`), then add to the toolbox in `ui/src/components/BlocklyEditor.tsx` |
+| Add a hardware component (new sensor/LED) | Drop PNG in `plugins/paperflow/ui/public/`, add to `AVAILABLE_IMAGES` in `plugins/paperflow/ui/src/pages/Builder.tsx` |
+| New custom node look/behavior | `plugins/paperflow/ui/src/nodes/*.tsx` |
+| New Blockly block / category | `plugins/paperflow/ui/src/blocks/*.ts` (register block + `pythonGenerator.forBlock`), then add to the toolbox in `plugins/paperflow/ui/src/components/BlocklyEditor.tsx` |
+| Change what the plugin serves / its nav entry | `plugins/paperflow/paperflow.py` |
 | Blocks → Airflow tasks | Greenfield: build the IR → DAG generator (`PLAN.md` Part I §4/§8), writing into `airflow/dags/` |
 | Add / edit a DAG | `airflow/dags/*.py` — Airflow 3 TaskFlow (`airflow.sdk`), camelCase names |
 | Run/trigger a DAG from the UI | Airflow API at `http://localhost:8080` while `airflow standalone` runs |
@@ -270,22 +281,26 @@ GitHub"), and scattered sticky-note dots in brand colors (desktop only).
 
 ## 8. Verification Checklist
 
-- **UI:** `cd ui && npm run lint && npm run build`.
+- **UI:** `cd airflow/plugins/paperflow/ui && npm run lint && npm run build`.
+- **Plugin:** with Airflow running, `curl -I http://localhost:8080/paperflow/`
+  should return 200 — and 404 with a build hint when `dist/` is missing.
 - **API:** start it, then `curl http://localhost:8000/health`.
 - **Airflow:** `cd airflow && export AIRFLOW_HOME="$PWD"`, then
   `uv run airflow dags test paperflow_demo 2025-01-01`.
 
 There are currently **no automated tests** (no `tests/` yet). Prefer adding
-pytest tests for Python logic and, if UI logic grows, a test runner for `ui/`.
+pytest tests for Python logic and, if UI logic grows, a test runner for the
+plugin UI.
 
 ---
 
 ## 9. Current Status & Gaps
 
-**Done:** FastAPI vision service (`api/`); `ui/` Notion-style landing page;
-React Flow canvas with custom nodes, dedupe, dark mode, resizable splits;
-Blockly → Python output; local Airflow 3.3.2 project in `airflow/` (uv-managed,
-LocalExecutor + SQLite) with a verified mock branch DAG.
+**Done:** FastAPI vision service (`api/`); local Airflow 3.3.2 project in
+`airflow/` (uv-managed, LocalExecutor + SQLite) with a verified mock branch DAG;
+the builder packaged as the `paperflow` Airflow plugin and served at
+`/paperflow/` — React Flow canvas with custom nodes, dedupe, dark mode,
+resizable splits; Blockly → Python output.
 
 **Removed — do not resurrect:** the old Docker Compose stack
 (`docker-compose.yaml`: Airflow 3.3.1 + PostgreSQL 16) along with `config/`,
@@ -301,6 +316,7 @@ history is in git (`b66541a`) if the old `vision_api_daily_dag.py` is needed.
 - Raspberry Pi integration is a placeholder (`GET /iot`), no MQTT broker yet.
 - `src/paperflow/` (rules, sensors, IR, generator) from `PLAN.md` Part I is not
   implemented yet.
-- No `tests/` and no `ui` unit tests.
-- Root `README.md` is a stale stub listing old Airflow commands — worth
-  replacing with real setup instructions.
+- No `tests/` and no UI unit tests.
+- The react-router landing page was dropped when the UI moved into the plugin;
+  `DESIGN.md` still specifies it if it is ever restored.
+- Nothing in the builder calls the `api/` vision service yet.
