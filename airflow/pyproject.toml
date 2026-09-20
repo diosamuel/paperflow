@@ -1,0 +1,7 @@
+[project]
+name = "paperflow-airflow"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "apache-airflow==3.3.2",
+]
