@@ -30,11 +30,25 @@ def utcNow():
 
 
 def readSensor(dht):
-    return {"temperature": dht.temperature, "humidity": dht.humidity}
+    try:
+        reading = {"temperature": dht.temperature, "humidity": dht.humidity}
+        print(f"[dht] temperature={reading['temperature']} humidity={reading['humidity']}")
+        return reading
+    except RuntimeError as error:
+        print(f"[dht] read failed: {error}")
+        return {"temperature": None, "humidity": None}
 
 
-def readButtons(buttons):
-    return {name: button.is_pressed for name, button in buttons.items()}
+def onButton(name, pressed, client, buttons):
+    print(f"[button] {name} {'pressed' if pressed else 'released'}")
+    payload = {buttonName: button.is_pressed for buttonName, button in buttons.items()}
+    client.publish(TOPIC_BUTTONS, json.dumps(payload))
+
+
+def setupButtons(client, buttons):
+    for name, button in buttons.items():
+        button.when_pressed = lambda n=name: onButton(n, True, client, buttons)
+        button.when_released = lambda n=name: onButton(n, False, client, buttons)
 
 
 def handleActuator(topic, payload, leds):
@@ -84,6 +98,7 @@ def main():
     leds = {name: LED(pin) for name, pin in LED_PINS.items()}
     buttons = {name: Button(pin, pull_up=True) for name, pin in BUTTON_PINS.items()}
     client = connect(leds)
+    setupButtons(client, buttons)
     while True:
         reading = readSensor(dht)
         if reading["temperature"] is not None:
@@ -108,7 +123,6 @@ def main():
                     }
                 ),
             )
-        client.publish(TOPIC_BUTTONS, json.dumps(readButtons(buttons)))
         time.sleep(PUBLISH_INTERVAL)
 
 
