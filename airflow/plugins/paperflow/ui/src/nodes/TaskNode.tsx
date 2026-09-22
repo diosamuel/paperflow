@@ -1,12 +1,12 @@
 import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 
-export type CardNodeData = {
+export type TaskNodeData = {
   label: string
 }
 
-export type CardNodeType = Node<CardNodeData, 'card'>
+export type TaskNodeType = Node<TaskNodeData, 'task'>
 
-export function CardNode({ data }: NodeProps<CardNodeType>) {
+export function TaskNode({ data }: NodeProps<TaskNodeType>) {
   return (
     <div className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-900 shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100">
       <Handle

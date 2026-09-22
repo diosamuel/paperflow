@@ -20,25 +20,32 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type OnBeforeDelete,
+  type OnEdgesChange,
+  type OnNodesChange,
+  type XYPosition,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+import type { WorkspaceSvg } from 'blockly'
 
+import { appendTaskBlock } from '../blocks/task'
 import { BlocklyEditor } from '../components/BlocklyEditor'
-import { CardNode, type CardNodeType } from '../nodes/CardNode'
+import { ConfirmDialog } from '../components/ConfirmDialog'
+import { TaskNode, type TaskNodeType } from '../nodes/TaskNode'
 import {
   ImageNode,
   type ImageNodeData,
   type ImageNodeType,
 } from '../nodes/ImageNode'
 
-const nodeTypes = { card: CardNode, image: ImageNode }
+const nodeTypes = { task: TaskNode, image: ImageNode }
 
 const COLUMN_GAP = 240
 
 const AVAILABLE_IMAGES = [
   { src: 'temp-sensor.png', label: 'Temp Sensor' },
   { src: 'humid-sensor.png', label: 'Humid Sensor' },
-  { src: 'soil-sensor.png', label: 'Soil Sensor' },
+  // { src: 'soil-sensor.png', label: 'Soil Sensor' },
   { src: 'red-led.png', label: 'Red LED' },
   { src: 'blue-led.png', label: 'Blue LED' },
   { src: 'green-led.png', label: 'Green LED' },
@@ -61,12 +68,12 @@ const initialNodes: Node[] = [
       label: 'Humid Sensor',
     },
   } satisfies ImageNodeType,
-  {
-    id: 'soil-sensor',
-    type: 'image',
-    position: { x: 0, y: COLUMN_GAP * 2 },
-    data: { src: 'soil-sensor.png', alt: 'Soil Sensor', label: 'Soil Sensor' },
-  } satisfies ImageNodeType,
+  // {
+  //   id: 'soil-sensor',
+  //   type: 'image',
+  //   position: { x: 0, y: COLUMN_GAP * 2 },
+  //   data: { src: 'soil-sensor.png', alt: 'Soil Sensor', label: 'Soil Sensor' },
+  // } satisfies ImageNodeType,
   {
     id: 'red-led',
     type: 'image',
@@ -89,15 +96,35 @@ const initialNodes: Node[] = [
 
 const initialEdges: Edge[] = [
   { id: 'e-temp-humid', source: 'temp-sensor', target: 'humid-sensor' },
-  { id: 'e-humid-soil', source: 'humid-sensor', target: 'soil-sensor' },
+  // { id: 'e-humid-soil', source: 'humid-sensor', target: 'soil-sensor' },
   { id: 'e-red-blue', source: 'red-led', target: 'blue-led' },
   { id: 'e-blue-green', source: 'blue-led', target: 'green-led' },
 ]
 
-function Flow() {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const [cardText, setCardText] = useState('')
+type FlowProps = {
+  nodes: Node[]
+  edges: Edge[]
+  onNodesChange: OnNodesChange<Node>
+  onEdgesChange: OnEdgesChange<Edge>
+  onConnect: (connection: Connection) => void
+  onBeforeDelete: OnBeforeDelete<Node, Edge>
+  onNodesDelete: (nodes: Node[]) => void
+  onAddTask: (position: XYPosition, label: string) => void
+  onAddImage: (position: XYPosition, src: string, label: string) => void
+}
+
+function Flow({
+  nodes,
+  edges,
+  onNodesChange,
+  onEdgesChange,
+  onConnect,
+  onBeforeDelete,
+  onNodesDelete,
+  onAddTask,
+  onAddImage,
+}: FlowProps) {
+  const [taskText, setTaskText] = useState('')
   const [dark, setDark] = useState(false)
   const { screenToFlowPosition } = useReactFlow()
 
@@ -111,11 +138,6 @@ function Flow() {
       .map((node) => (node.data as ImageNodeData).src),
   )
 
-  const onConnect = useCallback(
-    (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
-    [setEdges],
-  )
-
   const getCenterPosition = useCallback(
     () =>
       screenToFlowPosition({
@@ -125,45 +147,13 @@ function Flow() {
     [screenToFlowPosition],
   )
 
-  const addCard = useCallback(() => {
-    const position = getCenterPosition()
-
-    setNodes((nds) => [
-      ...nds,
-      {
-        id: crypto.randomUUID(),
-        type: 'card',
-        position,
-        data: { label: cardText.trim() || `Card ${nds.length + 1}` },
-      } satisfies CardNodeType,
-    ])
-    setCardText('')
-  }, [cardText, getCenterPosition, setNodes])
-
-  const addImage = useCallback(
-    (src: string, label: string) => {
-      const position = getCenterPosition()
-
-      setNodes((nds) => {
-        const exists = nds.some(
-          (node) =>
-            node.type === 'image' && (node.data as ImageNodeData).src === src,
-        )
-        if (exists) return nds
-
-        return [
-          ...nds,
-          {
-            id: crypto.randomUUID(),
-            type: 'image',
-            position,
-            data: { src, alt: label, label },
-          } satisfies ImageNodeType,
-        ]
-      })
-    },
-    [getCenterPosition, setNodes],
-  )
+  const handleAddTask = useCallback(() => {
+    onAddTask(
+      getCenterPosition(),
+      taskText.trim() || `Task ${nodes.length + 1}`,
+    )
+    setTaskText('')
+  }, [getCenterPosition, nodes.length, onAddTask, taskText])
 
   return (
     <ReactFlow
@@ -172,6 +162,8 @@ function Flow() {
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       onConnect={onConnect}
+      onBeforeDelete={onBeforeDelete}
+      onNodesDelete={onNodesDelete}
       nodeTypes={nodeTypes}
       deleteKeyCode={['Backspace', 'Delete']}
       fitView
@@ -182,17 +174,17 @@ function Flow() {
           <div className="flex flex-col gap-2">
             <input
               type="text"
-              value={cardText}
-              onChange={(event) => setCardText(event.target.value)}
-              placeholder="Card text"
+              value={taskText}
+              onChange={(event) => setTaskText(event.target.value)}
+              placeholder="Task name"
               className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
             />
             <button
               type="button"
-              onClick={addCard}
+              onClick={handleAddTask}
               className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-indigo-400 active:bg-indigo-600"
             >
-              + Add Card
+              + Add Task
             </button>
           </div>
 
@@ -214,7 +206,9 @@ function Flow() {
                         : `Add ${image.label}`
                     }
                     disabled={isUsed}
-                    onClick={() => addImage(image.src, image.label)}
+                    onClick={() =>
+                      onAddImage(getCenterPosition(), image.src, image.label)
+                    }
                     className={`flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-gray-50 p-1.5 transition-colors dark:border-gray-700 dark:bg-gray-900 ${
                       isUsed
                         ? 'cursor-not-allowed opacity-50'
@@ -263,8 +257,151 @@ const MIN_FLOW_HEIGHT = 180
 
 function Builder() {
   const containerRef = useRef<HTMLDivElement>(null)
+  const workspaceRef = useRef<WorkspaceSvg | null>(null)
+  const taskBlockCountRef = useRef(0)
+  const nodeToBlockRef = useRef(new Map<string, string>())
+  const blockToNodeRef = useRef(new Map<string, string>())
+  const confirmResolveRef = useRef<((confirmed: boolean) => void) | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{
+    itemCount: number
+    taskCount: number
+  } | null>(null)
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [blocklyHeight, setBlocklyHeight] = useState(() =>
     Math.max(240, Math.round(window.innerHeight * 0.4)),
+  )
+
+  const onConnect = useCallback(
+    (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
+    [setEdges],
+  )
+
+  const handleWorkspace = useCallback((workspace: WorkspaceSvg | null) => {
+    workspaceRef.current = workspace
+    if (workspace) return
+
+    taskBlockCountRef.current = 0
+    nodeToBlockRef.current.clear()
+    blockToNodeRef.current.clear()
+  }, [])
+
+  const handleAddTask = useCallback(
+    (position: XYPosition, label: string) => {
+      const nodeId = crypto.randomUUID()
+
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: nodeId,
+          type: 'task',
+          position,
+          data: { label },
+        } satisfies TaskNodeType,
+      ])
+
+      const workspace = workspaceRef.current
+      if (!workspace) return
+
+      const block = appendTaskBlock(
+        workspace,
+        label,
+        taskBlockCountRef.current,
+      )
+      taskBlockCountRef.current += 1
+      nodeToBlockRef.current.set(nodeId, block.id)
+      blockToNodeRef.current.set(block.id, nodeId)
+    },
+    [setNodes],
+  )
+
+  const handleAddImage = useCallback(
+    (position: XYPosition, src: string, label: string) => {
+      setNodes((nds) => {
+        const exists = nds.some(
+          (node) =>
+            node.type === 'image' && (node.data as ImageNodeData).src === src,
+        )
+        if (exists) return nds
+
+        return [
+          ...nds,
+          {
+            id: crypto.randomUUID(),
+            type: 'image',
+            position,
+            data: { src, alt: label, label },
+          } satisfies ImageNodeType,
+        ]
+      })
+    },
+    [setNodes],
+  )
+
+  const handleNodesDeleted = useCallback((deleted: Node[]) => {
+    const workspace = workspaceRef.current
+
+    for (const node of deleted) {
+      const blockId = nodeToBlockRef.current.get(node.id)
+      if (!blockId) continue
+
+      nodeToBlockRef.current.delete(node.id)
+      blockToNodeRef.current.delete(blockId)
+      workspace?.getBlockById(blockId)?.dispose(true)
+    }
+  }, [])
+
+  const handleBlockDeleted = useCallback(
+    (blockIds: string[]) => {
+      const removedNodeIds: string[] = []
+
+      for (const blockId of blockIds) {
+        const nodeId = blockToNodeRef.current.get(blockId)
+        if (!nodeId) continue
+
+        blockToNodeRef.current.delete(blockId)
+        nodeToBlockRef.current.delete(nodeId)
+        removedNodeIds.push(nodeId)
+      }
+
+      if (removedNodeIds.length === 0) return
+
+      setNodes((nds) => nds.filter((node) => !removedNodeIds.includes(node.id)))
+      setEdges((eds) =>
+        eds.filter(
+          (edge) =>
+            !removedNodeIds.includes(edge.source) &&
+            !removedNodeIds.includes(edge.target),
+        ),
+      )
+    },
+    [setEdges, setNodes],
+  )
+
+  const requestDeleteConfirmation = useCallback((nodesToDelete: Node[]) => {
+    if (confirmResolveRef.current) return Promise.resolve(false)
+
+    const taskCount = nodesToDelete.filter((node) => node.type === 'task').length
+
+    return new Promise<boolean>((resolve) => {
+      confirmResolveRef.current = resolve
+      setPendingDelete({ itemCount: nodesToDelete.length, taskCount })
+    })
+  }, [])
+
+  const settleDeleteConfirmation = useCallback((confirmed: boolean) => {
+    const resolve = confirmResolveRef.current
+    confirmResolveRef.current = null
+    setPendingDelete(null)
+    resolve?.(confirmed)
+  }, [])
+
+  const handleBeforeDelete = useCallback(
+    async ({ nodes: nodesToDelete }: { nodes: Node[]; edges: Edge[] }) =>
+      nodesToDelete.length === 0
+        ? true
+        : requestDeleteConfirmation(nodesToDelete),
+    [requestDeleteConfirmation],
   )
 
   const startResize = useCallback(
@@ -295,6 +432,16 @@ function Builder() {
     [],
   )
 
+  let confirmMessage = ''
+  if (pendingDelete) {
+    const { itemCount, taskCount } = pendingDelete
+    confirmMessage = `${itemCount} item${itemCount === 1 ? '' : 's'} will be removed from the canvas.`
+
+    if (taskCount > 0) {
+      confirmMessage += ` ${taskCount} task${taskCount === 1 ? '' : 's'} and the matching Blockly block${taskCount === 1 ? '' : 's'} will be deleted too.`
+    }
+  }
+
   return (
     <div
       ref={containerRef}
@@ -302,7 +449,17 @@ function Builder() {
     >
       <div className="min-h-0 flex-1">
         <ReactFlowProvider>
-          <Flow />
+          <Flow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onBeforeDelete={handleBeforeDelete}
+            onNodesDelete={handleNodesDeleted}
+            onAddTask={handleAddTask}
+            onAddImage={handleAddImage}
+          />
         </ReactFlowProvider>
       </div>
       <div
@@ -315,8 +472,18 @@ function Builder() {
         style={{ height: blocklyHeight }}
         className="min-h-0 shrink-0 bg-white dark:bg-gray-900"
       >
-        <BlocklyEditor />
+        <BlocklyEditor
+          onWorkspace={handleWorkspace}
+          onBlockDelete={handleBlockDeleted}
+        />
       </div>
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete selected items?"
+        message={confirmMessage}
+        onConfirm={() => settleDeleteConfirmation(true)}
+        onCancel={() => settleDeleteConfirmation(false)}
+      />
     </div>
   )
 }

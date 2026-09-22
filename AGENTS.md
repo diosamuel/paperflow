@@ -247,6 +247,16 @@ dropped; `DESIGN.md` still specifies it if it is ever restored.)
   from inside that directory before any `airflow` command. `airflow.cfg`,
   `airflow.db`, and `logs/` are generated there and gitignored — `airflow.cfg`
   embeds an absolute `dags_folder`, so it must never be committed.
+- **The repo drive is NTFS (`fuseblk`), so Airflow's default log path breaks every
+  task.** Airflow names task-log directories after the run id
+  (`.../run_id=manual__2026-09-21T14:54:54.703791+00:00/task_id=.../attempt=1.log`),
+  and NTFS rejects `:` in filenames — `mkdir` fails with `Invalid argument`, no log
+  file is written, and the task dies with `FileNotFoundError` before running. The
+  UI only shows the confusing side effect: *"Could not read served logs: Hostname
+  not available for worker"* (the TI's `hostname` is empty because the task never
+  started). Keep `[logging] base_log_folder` **and**
+  `[logging] dag_processor_child_process_log_directory` on a Linux filesystem
+  (`/home/diosamuel/paperflow-airflow-logs` in this repo).
 - **`airflow dags list` reads the DB, not the folder.** The dag-processor
   serializes DAGs, so without `airflow standalone` running the list is empty even
   though `DagBag` can happily parse the file.

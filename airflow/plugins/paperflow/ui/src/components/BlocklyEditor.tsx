@@ -10,35 +10,41 @@ import * as Blockly from 'blockly'
 import 'blockly/blocks'
 import { pythonGenerator } from 'blockly/python'
 
-import { CREATE_VARIABLE_BLOCK } from '../blocks/createVariable'
-import { HUMIDITY_SENSOR_BLOCK } from '../blocks/humiditySensor'
-
-const toolbox = {
-  kind: 'flyoutToolbox' as const,
-  contents: [
-    { kind: 'block' as const, type: HUMIDITY_SENSOR_BLOCK },
-    { kind: 'block' as const, type: CREATE_VARIABLE_BLOCK },
-    { kind: 'block' as const, type: 'controls_if' },
-    { kind: 'block' as const, type: 'logic_compare' },
-    { kind: 'block' as const, type: 'logic_operation' },
-    { kind: 'block' as const, type: 'math_number' },
-    { kind: 'block' as const, type: 'math_arithmetic' },
-    { kind: 'block' as const, type: 'text' },
-    { kind: 'block' as const, type: 'text_print' },
-  ],
-}
+import { toolbox } from '../toolbox'
 
 const EMPTY_CODE = '# Drag blocks to generate Python'
 const MIN_CODE_WIDTH = 160
 const MIN_WORKSPACE_WIDTH = 220
 
-export function BlocklyEditor() {
+const PRESET_VARIABLES = ['temperature', 'humidity']
+
+type BlocklyEditorProps = {
+  onWorkspace?: (workspace: Blockly.WorkspaceSvg | null) => void
+  onBlockDelete?: (blockIds: string[]) => void
+  onGenerateDag?: () => void
+}
+
+export function BlocklyEditor({
+  onWorkspace,
+  onBlockDelete,
+  onGenerateDag,
+}: BlocklyEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const onWorkspaceRef = useRef(onWorkspace)
+  const onBlockDeleteRef = useRef(onBlockDelete)
   const [code, setCode] = useState(EMPTY_CODE)
   const [codeWidth, setCodeWidth] = useState(() =>
     Math.max(MIN_CODE_WIDTH, Math.round(window.innerWidth * 0.3)),
   )
+
+  useEffect(() => {
+    onWorkspaceRef.current = onWorkspace
+  }, [onWorkspace])
+
+  useEffect(() => {
+    onBlockDeleteRef.current = onBlockDelete
+  }, [onBlockDelete])
 
   useEffect(() => {
     const container = containerRef.current
@@ -51,13 +57,26 @@ export function BlocklyEditor() {
       move: { scrollbars: true, drag: true, wheel: true },
     })
 
+    const variableMap = workspace.getVariableMap()
+    for (const name of PRESET_VARIABLES) variableMap.createVariable(name)
+
+    onWorkspaceRef.current?.(workspace)
+
     const updateCode = () => {
       const generated = pythonGenerator.workspaceToCode(workspace)
       setCode(generated.trim() || EMPTY_CODE)
     }
 
+    const onDelete = (event: Blockly.Events.Abstract) => {
+      if (event.type !== Blockly.Events.BLOCK_DELETE) return
+
+      const { ids } = event as Blockly.Events.BlockDelete
+      if (ids && ids.length > 0) onBlockDeleteRef.current?.(ids)
+    }
+
     updateCode()
     workspace.addChangeListener(updateCode)
+    workspace.addChangeListener(onDelete)
 
     const resize = () => Blockly.svgResize(workspace)
     window.addEventListener('resize', resize)
@@ -66,8 +85,10 @@ export function BlocklyEditor() {
 
     return () => {
       workspace.removeChangeListener(updateCode)
+      workspace.removeChangeListener(onDelete)
       observer.disconnect()
       window.removeEventListener('resize', resize)
+      onWorkspaceRef.current?.(null)
       workspace.dispose()
     }
   }, [])
@@ -114,8 +135,23 @@ export function BlocklyEditor() {
         <div className="h-10 w-0.5 rounded-full bg-gray-400 group-hover:bg-white dark:bg-gray-600" />
       </div>
       <div className="flex h-1/2 w-full min-h-0 flex-col border-t border-gray-300 md:h-full md:w-(--code-width) md:shrink-0 md:border-t-0 md:border-l dark:border-gray-700">
-        <div className="shrink-0 border-b border-gray-300 px-3 py-1.5 text-xs font-semibold tracking-wide text-gray-500 uppercase dark:border-gray-700 dark:text-gray-400">
-          Python
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-gray-300 px-3 py-1.5 dark:border-gray-700">
+          <span className="text-xs font-semibold tracking-wide text-gray-500 uppercase dark:text-gray-400">
+            Python
+          </span>
+          <button
+            type="button"
+            onClick={() => onGenerateDag?.()}
+            disabled={!onGenerateDag}
+            title={
+              onGenerateDag
+                ? 'Generate an Airflow DAG from this workflow'
+                : 'Not implemented yet'
+            }
+            className="rounded-md bg-indigo-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-400 active:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Generate Airflow DAG
+          </button>
         </div>
         <pre className="min-h-0 flex-1 overflow-auto bg-gray-50 p-3 text-xs leading-relaxed text-gray-800 dark:bg-gray-900 dark:text-gray-100">
           <code>{code}</code>
