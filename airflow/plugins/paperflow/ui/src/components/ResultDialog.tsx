@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 
-const CHECK_DELAY = 1000
+const CHECK_DELAY = 300
 
 export type ValidationCheck = {
   id: string
+  task: string
   text: string
   ok: boolean
 }
@@ -14,6 +15,11 @@ type ResultDialogProps = {
   onClose: () => void
   onGenerate: () => void
 }
+
+type Row =
+  | { kind: 'heading'; key: string; task: string }
+  | { kind: 'check'; key: string; text: string; ok: boolean }
+  | { kind: 'pending'; key: string }
 
 export function ResultDialog({
   open,
@@ -57,12 +63,36 @@ export function ResultDialog({
   const done = revealed >= checks.length
   const allOk = checks.every((check) => check.ok)
   const visible = checks.slice(0, revealed)
+  const pending = done ? null : checks[revealed]
 
   const title = !done
     ? 'Validating connections'
     : allOk
       ? 'Success validated'
       : 'Validation failed'
+
+  const rows: Row[] = []
+  let lastTask: string | null = null
+
+  visible.forEach((check, index) => {
+    if (check.task !== lastTask) {
+      rows.push({ kind: 'heading', key: `h-${index}`, task: check.task })
+      lastTask = check.task
+    }
+    rows.push({
+      kind: 'check',
+      key: check.id,
+      text: check.text,
+      ok: check.ok,
+    })
+  })
+
+  if (pending) {
+    if (pending.task !== lastTask) {
+      rows.push({ kind: 'heading', key: 'h-pending', task: pending.task })
+    }
+    rows.push({ kind: 'pending', key: 'pending' })
+  }
 
   return (
     <div
@@ -89,32 +119,47 @@ export function ResultDialog({
         </h2>
 
         <ul className="mt-3 flex max-h-64 flex-col gap-1.5 overflow-auto text-sm text-gray-600 dark:text-gray-300">
-          {visible.map((check) => (
-            <li key={check.id} className="flex items-center gap-2">
-              <span
-                aria-hidden
-                className={`w-4 text-center font-bold ${
-                  check.ok
-                    ? 'text-green-600 dark:text-green-400'
-                    : 'text-red-600 dark:text-red-400'
-                }`}
-              >
-                {check.ok ? '✓' : '✕'}
-              </span>
-              <span>{check.text}</span>
-            </li>
-          ))}
+          {rows.map((row) => {
+            if (row.kind === 'heading') {
+              return (
+                <li
+                  key={row.key}
+                  className="mt-2 text-xs font-semibold tracking-wide text-gray-500 uppercase first:mt-0 dark:text-gray-400"
+                >
+                  {row.task}
+                </li>
+              )
+            }
 
-          {!done && (
-            <li className="flex items-center gap-2">
-              <span className="flex w-4 justify-center">
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-gray-400 border-t-transparent dark:border-gray-500 dark:border-t-transparent" />
-              </span>
-              <span className="text-gray-500 dark:text-gray-400">
-                Checking components...
-              </span>
-            </li>
-          )}
+            if (row.kind === 'pending') {
+              return (
+                <li key={row.key} className="flex items-center gap-2">
+                  <span className="flex w-4 justify-center">
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-gray-400 border-t-transparent dark:border-gray-500 dark:border-t-transparent" />
+                  </span>
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Checking components...
+                  </span>
+                </li>
+              )
+            }
+
+            return (
+              <li key={row.key} className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className={`w-4 text-center font-bold ${
+                    row.ok
+                      ? 'text-green-600 dark:text-green-400'
+                      : 'text-red-600 dark:text-red-400'
+                  }`}
+                >
+                  {row.ok ? '✓' : '✕'}
+                </span>
+                <span>{row.text}</span>
+              </li>
+            )
+          })}
         </ul>
 
         <div className="mt-4 flex justify-end gap-2">
@@ -139,8 +184,8 @@ export function ResultDialog({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
               disabled={!done}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
             >
               Close
             </button>

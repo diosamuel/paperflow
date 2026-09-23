@@ -27,7 +27,7 @@ Blockly.defineBlocksWithJsonArray([
   },
 ])
 
-function slugify(raw: string): string {
+export function slugify(raw: string): string {
   const cleaned = raw
     .toLowerCase()
     .replace(/[^\w]+/g, '_')

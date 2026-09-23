@@ -30,7 +30,7 @@ import '@xyflow/react/dist/style.css'
 import type { WorkspaceSvg } from 'blockly'
 import { pythonGenerator } from 'blockly/python'
 
-import { TASK_BLOCK, appendTaskBlock } from '../blocks/task'
+import { TASK_BLOCK, appendTaskBlock, slugify } from '../blocks/task'
 import { BlocklyEditor } from '../components/BlocklyEditor'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { ResultDialog, type ValidationCheck } from '../components/ResultDialog'
@@ -174,6 +174,45 @@ function parseReferencedComponents(code: string): Set<string> {
   }
 
   return found
+}
+
+function resolveTaskBlockId(
+  workspace: WorkspaceSvg,
+  node: Node,
+  blockByName: Map<string, string>,
+  savedById: Map<string, string>,
+  linkedBlockId?: string,
+): string | undefined {
+  const data = node.data as TaskNodeType['data']
+
+  const linked =
+    linkedBlockId && workspace.getBlockById(linkedBlockId)
+      ? linkedBlockId
+      : undefined
+  const saved = savedById.get(node.id)
+  const resolved =
+    linked ??
+    (data.blockName ? blockByName.get(data.blockName) : undefined) ??
+    (saved && workspace.getBlockById(saved) ? saved : undefined)
+
+  if (resolved) return resolved
+
+  const slug = slugify(data.label)
+  if (blockByName.has(slug)) return blockByName.get(slug)
+
+  for (const [name, blockId] of blockByName) {
+    if (name.startsWith(`${slug}_`)) return blockId
+  }
+
+  return undefined
+}
+
+function buildBlockNameMap(workspace: WorkspaceSvg): Map<string, string> {
+  return new Map(
+    workspace
+      .getAllBlocks(false)
+      .map((block) => [block.getFieldValue('NAME') as string, block.id]),
+  )
 }
 
 type FlowProps = {
@@ -414,11 +453,19 @@ function Builder() {
     if (!workspace) return
 
     const checks: ValidationCheck[] = []
+    const blockByName = buildBlockNameMap(workspace)
+    const savedById = new Map(loadNodeBlockMap())
 
     for (const node of nodes) {
       if (node.type !== 'task') continue
 
-      const blockId = nodeToBlockRef.current.get(node.id)
+      const blockId = resolveTaskBlockId(
+        workspace,
+        node,
+        blockByName,
+        savedById,
+        nodeToBlockRef.current.get(node.id),
+      )
       const block = blockId ? workspace.getBlockById(blockId) : null
       if (!block) continue
 
@@ -453,6 +500,7 @@ function Builder() {
 
         checks.push({
           id: `${node.id}:${key}`,
+          task: (node.data as TaskNodeType['data']).label,
           ok: used && wired,
           text,
         })
@@ -464,28 +512,54 @@ function Builder() {
 
   const handleWorkspace = useCallback((workspace: WorkspaceSvg | null) => {
     workspaceRef.current = workspace
-    if (!workspace) return
 
-    const savedMap = loadNodeBlockMap()
-    if (savedMap.length > 0) {
-      const blockMap = new Map(workspace.getAllBlocks(false).map((b) => [b.getFieldValue('NAME') as string, b.id]))
-      for (const [nodeId, _oldBlockId] of savedMap) {
-        const node = nodes.find((n) => n.id === nodeId)
-        if (node?.type !== 'task') continue
-        const blockId = blockMap.get((node.data as TaskNodeType['data']).label)
-        if (blockId) {
-          nodeToBlockRef.current.set(nodeId, blockId)
-          blockToNodeRef.current.set(blockId, nodeId)
-        }
-      }
+    if (!workspace) {
+      taskBlockCountRef.current = 0
+      nodeToBlockRef.current.clear()
+      blockToNodeRef.current.clear()
+      return
     }
 
-    taskBlockCountRef.current = workspace.getAllBlocks(false).filter((b) => b.type === TASK_BLOCK).length
+    const savedById = new Map(loadNodeBlockMap())
+    const blockByName = buildBlockNameMap(workspace)
+
+    for (const node of nodes) {
+      if (node.type !== 'task') continue
+
+      const blockId = resolveTaskBlockId(
+        workspace,
+        node,
+        blockByName,
+        savedById,
+      )
+      if (!blockId) continue
+
+      nodeToBlockRef.current.set(node.id, blockId)
+      blockToNodeRef.current.set(blockId, node.id)
+    }
+
+    taskBlockCountRef.current = workspace
+      .getAllBlocks(false)
+      .filter((block) => block.type === TASK_BLOCK).length
   }, [nodes])
 
   const handleAddTask = useCallback(
     (position: XYPosition, label: string) => {
       const nodeId = crypto.randomUUID()
+      const workspace = workspaceRef.current
+
+      let blockName: string | undefined
+      if (workspace) {
+        const block = appendTaskBlock(
+          workspace,
+          label,
+          taskBlockCountRef.current,
+        )
+        taskBlockCountRef.current += 1
+        blockName = block.getFieldValue('NAME') as string
+        nodeToBlockRef.current.set(nodeId, block.id)
+        blockToNodeRef.current.set(block.id, nodeId)
+      }
 
       setNodes((nds) => [
         ...nds,
@@ -493,21 +567,9 @@ function Builder() {
           id: nodeId,
           type: 'task',
           position,
-          data: { label },
+          data: { label, blockName },
         } satisfies TaskNodeType,
       ])
-
-      const workspace = workspaceRef.current
-      if (!workspace) return
-
-      const block = appendTaskBlock(
-        workspace,
-        label,
-        taskBlockCountRef.current,
-      )
-      taskBlockCountRef.current += 1
-      nodeToBlockRef.current.set(nodeId, block.id)
-      blockToNodeRef.current.set(block.id, nodeId)
     },
     [setNodes],
   )

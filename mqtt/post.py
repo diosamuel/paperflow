@@ -16,7 +16,7 @@ TOPIC_BUTTONS = "paperflow/sensor/buttons"
 TOPIC_ACTUATOR = "paperflow/actuator/+"
 
 LED_PINS = {"red": 27, "yellow": 22, "green": 17}
-BUTTON_PINS = {"blueButton": 13}
+BUTTON_PINS = {"blueButton": 19}
 
 
 def readSensor(dht):

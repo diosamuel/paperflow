@@ -2,6 +2,7 @@ import { Handle, Position, type Node, type NodeProps } from '@xyflow/react'
 
 export type TaskNodeData = {
   label: string
+  blockName?: string
 }
 
 export type TaskNodeType = Node<TaskNodeData, 'task'>

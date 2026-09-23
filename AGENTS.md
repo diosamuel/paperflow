@@ -40,8 +40,9 @@ The generated workflow is meant to run in Airflow and eventually drive
 ```
 paperflow/
 ├── api/                    # FastAPI "PaperFlow Vision API"
-│   ├── main.py             # /, /health, /iot (placeholder), /upload
+│   ├── main.py             # /, /health, /iot, /iot/sensor, /iot/buttons, /iot/led/{color}, /upload
 │   ├── gemini_service.py   # Gemini Vision call (google-genai, fallback SDK)
+│   ├── mqtt_bridge.py      # paho subscriber + last-value cache for Pi telemetry
 │   ├── requirements.txt
 │   ├── README.md
 │   └── .env.example
@@ -51,7 +52,7 @@ paperflow/
 │   ├── constraints.txt     # official constraints-3.3.2 for py3.12
 │   ├── .python-version     # 3.12
 │   ├── README.md           # setup/run commands
-│   ├── dags/paperflow_dag.py   # mock sensor → rule → branch DAG
+│   ├── dags/               # paperflow_dag.py (mock branch), led_sensor_demo.py (real IoT via api/), gemini_*_demo.py, hitl_approval_demo.py
 │   └── plugins/
 │       ├── .airflowignore      # prunes node_modules/dist from plugin scan
 │       └── paperflow/
@@ -60,8 +61,9 @@ paperflow/
 │               ├── index.html
 │               ├── vite.config.ts   # base './', outDir dist
 │               ├── src/
-│               │   ├── main.tsx            # renders Builder directly
+│               │   ├── main.tsx            # react-router: / -> Builder, /wiring -> Wiring
 │               │   ├── pages/Builder.tsx   # React Flow + Blockly split view
+│               │   ├── pages/Wiring.tsx    # Pi/breadboard canvas + live API log sidebar
 │               │   ├── blocks/             # custom blocks + Python generators
 │               │   ├── components/BlocklyEditor.tsx
 │               │   ├── nodes/              # CardNode.tsx, ImageNode.tsx
@@ -116,9 +118,19 @@ python main.py                # or: uvicorn main:app --reload --port 8000
 ```
 
 Interactive docs: `http://localhost:8000/docs`. Endpoints: `GET /` (welcome),
-`GET /health` (reports whether `GEMINI_API_KEY` is configured and the default
-model), `POST /upload` (multipart `file`, optional `prompt` form field),
-`GET /iot` (placeholder).
+`GET /health` (reports whether `GEMINI_API_KEY` is configured, the default model,
+and MQTT connectivity), `POST /upload` (multipart `file`, optional `prompt` form
+field), `GET /iot` (combined sensor + button snapshot), `GET /iot/sensor` (latest
+`temp`/`humid` from `paperflow/sensor`), `GET /iot/buttons`,
+`POST /iot/led/{color}` (publishes `on=true`/`on=false` to `paperflow/actuator/{color}`),
+and `GET /iot/stream` (SSE push of every reading, consumed by the builder's Wiring page).
+
+`mqtt_bridge.py` runs one paho client with the app's lifespan (started in
+`main.py`), subscribing to `paperflow/sensor` and `paperflow/sensor/buttons` and
+caching only the latest message in memory; the `/iot/*` endpoints read that cache.
+Topics and payloads mirror `mqtt/post.py` on the Pi. Run a **single** API process
+(no `--workers`) — each worker would hold its own MQTT connection and cache.
+Requires `paho-mqtt` (see `api/requirements.txt`).
 
 ### Airflow — `airflow/`
 
@@ -147,10 +159,13 @@ The builder is an Airflow **plugin**, not a standalone site: Vite builds it and
 `plugins/paperflow/paperflow.py` serves `dist/` at `/paperflow/`.
 
 **Stack:** Vite 8, React 19, TypeScript 6, Tailwind CSS v4 (via
-`@tailwindcss/vite`), `@xyflow/react` (React Flow v12), `blockly` v13, oxlint.
-There is **no router** — `src/main.tsx` renders `pages/Builder.tsx` directly. (A
-react-router landing page existed before the move into the plugin and was
-dropped; `DESIGN.md` still specifies it if it is ever restored.)
+`@tailwindcss/vite`), `@xyflow/react` (React Flow v12), `blockly` v13, `react-router-dom` v7, oxlint.
+
+Routing lives in `src/main.tsx`: `/` renders `pages/Builder.tsx`, `/wiring` renders
+`pages/Wiring.tsx`. The Wiring page is a fixed 1440×900 canvas (Pi PNG + breadboard
++ SVG jumper wires) with a right sidebar that streams `GET /iot/stream` (SSE) from
+the Vision API into a live log. The API base defaults to `http://localhost:8000`
+and can be overridden with the `VITE_API_BASE` env var at build time.
 
 **`src/pages/Builder.tsx`**:
 - A vertical split: React Flow canvas on top, Blockly editor on the bottom,
@@ -284,7 +299,7 @@ dropped; `DESIGN.md` still specifies it if it is ever restored.)
 | Blocks → Airflow tasks | Greenfield: build the IR → DAG generator (`PLAN.md` Part I §4/§8), writing into `airflow/dags/` |
 | Add / edit a DAG | `airflow/dags/*.py` — Airflow 3 TaskFlow (`airflow.sdk`), camelCase names |
 | Run/trigger a DAG from the UI | Airflow API at `http://localhost:8080` while `airflow standalone` runs |
-| Raspberry Pi telemetry / actuators | `api/main.py` `GET /iot`; MQTT topics in `PLAN.md` §9 |
+| Raspberry Pi telemetry / actuators | `api/main.py` `GET /iot/sensor`, `POST /iot/led/{color}`; MQTT topics in `PLAN.md` §9 |
 | Paper-recognition path | `api/` (Gemini Vision) — no DAG consumes it yet; that consumer still has to be written |
 
 ---
@@ -323,7 +338,9 @@ history is in git (`b66541a`) if the old `vision_api_daily_dag.py` is needed.
 - `airflow/dags/paperflow_dag.py` is a self-contained mock; `PLAN.md` Phase 1
   will move that logic into `src/paperflow/`.
 - Blockly toolbox is minimal; not yet mapped to Airflow task types.
-- Raspberry Pi integration is a placeholder (`GET /iot`), no MQTT broker yet.
+- Raspberry Pi telemetry reaches `api/` over MQTT (`paperflow/sensor`) into an
+  in-memory cache read by `/iot/*`; no Airflow DAG consumes it yet and the broker
+  is the public `broker.mqtt.cool` (no auth).
 - `src/paperflow/` (rules, sensors, IR, generator) from `PLAN.md` Part I is not
   implemented yet.
 - No `tests/` and no UI unit tests.
