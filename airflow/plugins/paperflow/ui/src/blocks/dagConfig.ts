@@ -3,7 +3,7 @@ import { pythonGenerator } from 'blockly/python'
 
 export const DAG_CONFIG_BLOCK = 'dag_config'
 
-const SCHEDULE_OPTIONS = [
+export const SCHEDULE_OPTIONS = [
   ['@daily', '@daily'],
   ['@hourly', '@hourly'],
   ['@weekly', '@weekly'],

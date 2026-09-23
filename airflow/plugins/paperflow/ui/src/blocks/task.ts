@@ -1,5 +1,7 @@
 import * as Blockly from 'blockly'
-import { pythonGenerator } from 'blockly/python'
+import { Order, pythonGenerator } from 'blockly/python'
+
+import { DAG_BLOCK } from './dag'
 
 export const TASK_BLOCK = 'task'
 
@@ -22,8 +24,18 @@ Blockly.defineBlocksWithJsonArray([
         name: 'BODY',
       },
     ],
+    message2: 'return %1',
+    args2: [
+      {
+        type: 'input_value',
+        name: 'RETURN',
+      },
+    ],
+    previousStatement: null,
+    nextStatement: null,
     colour: '#7b3ff2',
-    tooltip: 'The body of one task. Blocks inside run when this task runs.',
+    tooltip:
+      'One task. Blocks inside run when this task runs, and the returned value is passed on like an Airflow XCom.',
   },
 ])
 
@@ -55,8 +67,14 @@ function uniqueTaskName(workspace: Blockly.Workspace, base: string): string {
 pythonGenerator.forBlock[TASK_BLOCK] = (block) => {
   const name = block.getFieldValue('NAME')
   const body = pythonGenerator.statementToCode(block, 'BODY')
+  const returnValue = pythonGenerator.valueToCode(block, 'RETURN', Order.NONE)
 
-  return `def ${name}():\n${body || '  pass\n'}\n`
+  const lines: string[] = []
+  if (body) lines.push(body)
+  if (returnValue) lines.push(`  return ${returnValue}\n`)
+  if (lines.length === 0) lines.push('  pass\n')
+
+  return `def ${name}():\n${lines.join('')}\n`
 }
 
 export function appendTaskBlock(
@@ -77,5 +95,35 @@ export function appendTaskBlock(
   const nameField = block.getField('NAME')
   if (nameField) nameField.EDITABLE = false
 
+  nestIntoDag(block, workspace)
+
   return block
+}
+
+function nestIntoDag(block: Blockly.Block, workspace: Blockly.WorkspaceSvg) {
+  const dagBlock = workspace
+    .getAllBlocks(false)
+    .find((candidate) => candidate.type === DAG_BLOCK)
+
+  const bodyInput = dagBlock?.getInput('BODY')
+  if (!bodyInput?.connection || !block.previousConnection) return
+
+  let connection = bodyInput.connection
+  let last = connection.targetBlock()
+
+  while (last) {
+    const next = last.nextConnection
+    if (!next) return
+
+    if (!next.targetBlock()) {
+      connection = next
+      break
+    }
+
+    last = next.targetBlock()
+  }
+
+  if (!connection.targetBlock()) {
+    connection.connect(block.previousConnection)
+  }
 }
