@@ -5,6 +5,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   addEdge,
   Background,
@@ -27,10 +28,12 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { WorkspaceSvg } from 'blockly'
+import { pythonGenerator } from 'blockly/python'
 
-import { appendTaskBlock } from '../blocks/task'
+import { TASK_BLOCK, appendTaskBlock } from '../blocks/task'
 import { BlocklyEditor } from '../components/BlocklyEditor'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { ResultDialog, type ValidationCheck } from '../components/ResultDialog'
 import { TaskNode, type TaskNodeType } from '../nodes/TaskNode'
 import {
   ImageNode,
@@ -94,12 +97,84 @@ const initialNodes: Node[] = [
   } satisfies ImageNodeType,
 ]
 
-const initialEdges: Edge[] = [
-  { id: 'e-temp-humid', source: 'temp-sensor', target: 'humid-sensor' },
-  // { id: 'e-humid-soil', source: 'humid-sensor', target: 'soil-sensor' },
-  { id: 'e-red-blue', source: 'red-led', target: 'blue-led' },
-  { id: 'e-blue-green', source: 'blue-led', target: 'green-led' },
-]
+const initialEdges: Edge[] = []
+
+const STORAGE_KEY_NODES = 'paperflow:nodes'
+const STORAGE_KEY_EDGES = 'paperflow:edges'
+const STORAGE_KEY_NODE_BLOCK_MAP = 'paperflow:node-block-map'
+
+function loadNodes(): Node[] | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_NODES)
+    return raw ? (JSON.parse(raw) as Node[]) : null
+  } catch {
+    return null
+  }
+}
+
+function loadEdges(): Edge[] | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_EDGES)
+    return raw ? (JSON.parse(raw) as Edge[]) : null
+  } catch {
+    return null
+  }
+}
+
+function loadNodeBlockMap(): [string, string][] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_NODE_BLOCK_MAP)
+    return raw ? (JSON.parse(raw) as [string, string][]) : []
+  } catch {
+    return []
+  }
+}
+
+function saveNodes(nodes: Node[]) {
+  localStorage.setItem(STORAGE_KEY_NODES, JSON.stringify(nodes))
+}
+
+function saveEdges(edges: Edge[]) {
+  localStorage.setItem(STORAGE_KEY_EDGES, JSON.stringify(edges))
+}
+
+function saveNodeBlockMap(map: Map<string, string>) {
+  localStorage.setItem(
+    STORAGE_KEY_NODE_BLOCK_MAP,
+    JSON.stringify([...map]),
+  )
+}
+
+const COMPONENT_BY_SRC: Record<string, string> = {
+  'temp-sensor.png': 'temperature',
+  'humid-sensor.png': 'humidity',
+  'red-led.png': 'led:red',
+  'blue-led.png': 'led:blue',
+  'green-led.png': 'led:green',
+}
+
+const COMPONENT_LABELS: Record<string, string> = {
+  temperature: 'Temp Sensor',
+  humidity: 'Humid Sensor',
+  'led:red': 'Red LED',
+  'led:blue': 'Blue LED',
+  'led:green': 'Green LED',
+}
+
+function parseReferencedComponents(code: string): Set<string> {
+  const found = new Set<string>()
+
+  if (/\bread_temperature\s*\(/.test(code)) found.add('temperature')
+  if (/\bread_humidity\s*\(/.test(code)) found.add('humidity')
+
+  const ledRegex = /set_led\(\s*['"](\w+)['"]/g
+  let match: RegExpExecArray | null
+  while ((match = ledRegex.exec(code)) !== null) {
+    found.add(`led:${match[1]}`)
+  }
+
+  return found
+}
 
 type FlowProps = {
   nodes: Node[]
@@ -127,6 +202,7 @@ function Flow({
   const [taskText, setTaskText] = useState('')
   const [dark, setDark] = useState(false)
   const { screenToFlowPosition } = useReactFlow()
+  const navigate = useNavigate()
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark)
@@ -155,6 +231,16 @@ function Flow({
     setTaskText('')
   }, [getCenterPosition, nodes.length, onAddTask, taskText])
 
+  const isValidConnection = useCallback(
+    (connection: Edge | Connection) => {
+      const sourceNode = nodes.find((n) => n.id === connection.source)
+      const targetNode = nodes.find((n) => n.id === connection.target)
+      if (!sourceNode || !targetNode) return false
+      return !(sourceNode.type === 'image' && targetNode.type === 'image')
+    },
+    [nodes],
+  )
+
   return (
     <ReactFlow
       nodes={nodes}
@@ -165,6 +251,7 @@ function Flow({
       onBeforeDelete={onBeforeDelete}
       onNodesDelete={onNodesDelete}
       nodeTypes={nodeTypes}
+      isValidConnection={isValidConnection}
       deleteKeyCode={['Backspace', 'Delete']}
       fitView
       className="h-full w-full bg-gray-50 dark:bg-gray-900"
@@ -240,6 +327,15 @@ function Flow({
           </div>
         </div>
       </Panel>
+      <Panel position="top-right">
+        <button
+          type="button"
+          onClick={() => navigate('/wiring')}
+          className="rounded-lg border border-gray-300 bg-white/95 px-4 py-2 text-sm font-medium text-gray-700 shadow-lg backdrop-blur transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800/95 dark:text-gray-200 dark:hover:bg-gray-700"
+        >
+          Raspberry PI Wiring
+        </button>
+      </Panel>
       <Background
         variant={BackgroundVariant.Dots}
         gap={20}
@@ -266,25 +362,126 @@ function Builder() {
     itemCount: number
     taskCount: number
   } | null>(null)
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+  const [validationChecks, setValidationChecks] = useState<
+    ValidationCheck[] | null
+  >(null)
+  const [nodes, setNodes, onNodesChange] = useNodesState(
+    loadNodes() ?? initialNodes,
+  )
+  const [edges, setEdges, onEdgesChange] = useEdgesState(
+    loadEdges() ?? initialEdges,
+  )
   const [blocklyHeight, setBlocklyHeight] = useState(() =>
     Math.max(240, Math.round(window.innerHeight * 0.4)),
   )
+
+  useEffect(() => {
+    saveNodes(nodes)
+  }, [nodes])
+
+  useEffect(() => {
+    saveEdges(edges)
+  }, [edges])
+
+  useEffect(() => {
+    const selectedIds = new Set(
+      nodes.filter((node) => node.selected).map((node) => node.id),
+    )
+    setEdges((eds) => {
+      let changed = false
+      const next = eds.map((edge) => {
+        const shouldAnimate =
+          selectedIds.has(edge.source) || selectedIds.has(edge.target)
+        if (Boolean(edge.animated) === shouldAnimate) return edge
+        changed = true
+        return { ...edge, animated: shouldAnimate }
+      })
+      return changed ? next : eds
+    })
+  }, [nodes, setEdges])
+
+  useEffect(() => {
+    saveNodeBlockMap(nodeToBlockRef.current)
+  }, [nodes])
 
   const onConnect = useCallback(
     (connection: Connection) => setEdges((eds) => addEdge(connection, eds)),
     [setEdges],
   )
 
+  const handleGenerateDag = useCallback(() => {
+    const workspace = workspaceRef.current
+    if (!workspace) return
+
+    const checks: ValidationCheck[] = []
+
+    for (const node of nodes) {
+      if (node.type !== 'task') continue
+
+      const blockId = nodeToBlockRef.current.get(node.id)
+      const block = blockId ? workspace.getBlockById(blockId) : null
+      if (!block) continue
+
+      const code = pythonGenerator.blockToCode(block) as string
+      const referenced = parseReferencedComponents(code)
+
+      const connected = new Set<string>()
+      for (const edge of edges) {
+        const otherId =
+          edge.source === node.id
+            ? edge.target
+            : edge.target === node.id
+              ? edge.source
+              : null
+        if (!otherId) continue
+
+        const other = nodes.find((n) => n.id === otherId)
+        if (other?.type !== 'image') continue
+
+        const key = COMPONENT_BY_SRC[(other.data as ImageNodeData).src]
+        if (key) connected.add(key)
+      }
+
+      for (const key of new Set([...referenced, ...connected])) {
+        const used = referenced.has(key)
+        const wired = connected.has(key)
+        const label = COMPONENT_LABELS[key]
+
+        let text = `${label} validated`
+        if (used && !wired) text = `${label} is not connected`
+        else if (!used && wired) text = `${label} is not used`
+
+        checks.push({
+          id: `${node.id}:${key}`,
+          ok: used && wired,
+          text,
+        })
+      }
+    }
+
+    setValidationChecks(checks)
+  }, [edges, nodes])
+
   const handleWorkspace = useCallback((workspace: WorkspaceSvg | null) => {
     workspaceRef.current = workspace
-    if (workspace) return
+    if (!workspace) return
 
-    taskBlockCountRef.current = 0
-    nodeToBlockRef.current.clear()
-    blockToNodeRef.current.clear()
-  }, [])
+    const savedMap = loadNodeBlockMap()
+    if (savedMap.length > 0) {
+      const blockMap = new Map(workspace.getAllBlocks(false).map((b) => [b.getFieldValue('NAME') as string, b.id]))
+      for (const [nodeId, _oldBlockId] of savedMap) {
+        const node = nodes.find((n) => n.id === nodeId)
+        if (node?.type !== 'task') continue
+        const blockId = blockMap.get((node.data as TaskNodeType['data']).label)
+        if (blockId) {
+          nodeToBlockRef.current.set(nodeId, blockId)
+          blockToNodeRef.current.set(blockId, nodeId)
+        }
+      }
+    }
+
+    taskBlockCountRef.current = workspace.getAllBlocks(false).filter((b) => b.type === TASK_BLOCK).length
+  }, [nodes])
 
   const handleAddTask = useCallback(
     (position: XYPosition, label: string) => {
@@ -475,6 +672,7 @@ function Builder() {
         <BlocklyEditor
           onWorkspace={handleWorkspace}
           onBlockDelete={handleBlockDeleted}
+          onGenerateDag={handleGenerateDag}
         />
       </div>
       <ConfirmDialog
@@ -483,6 +681,12 @@ function Builder() {
         message={confirmMessage}
         onConfirm={() => settleDeleteConfirmation(true)}
         onCancel={() => settleDeleteConfirmation(false)}
+      />
+      <ResultDialog
+        open={validationChecks !== null}
+        checks={validationChecks ?? []}
+        onClose={() => setValidationChecks(null)}
+        onGenerate={() => setValidationChecks(null)}
       />
     </div>
   )

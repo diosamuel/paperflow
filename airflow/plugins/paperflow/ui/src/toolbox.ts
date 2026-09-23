@@ -1,3 +1,4 @@
+import { DAG_CONFIG_BLOCK } from './blocks/dagConfig'
 import { HUMIDITY_SENSOR_BLOCK } from './blocks/humiditySensor'
 import { LED_BLOCK } from './blocks/led'
 import { TEMPERATURE_SENSOR_BLOCK } from './blocks/temperatureSensor'
@@ -14,6 +15,7 @@ const category = (name: string, colour: string, types: string[]) => ({
 export const toolbox = {
   kind: 'categoryToolbox' as const,
   contents: [
+    category('DAG Config', '#2a7de1', [DAG_CONFIG_BLOCK]),
     category('Sensors & LEDs', '#7b3ff2', [
       TEMPERATURE_SENSOR_BLOCK,
       HUMIDITY_SENSOR_BLOCK,

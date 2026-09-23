@@ -8,13 +8,13 @@ export type ImageNodeData = {
 
 export type ImageNodeType = Node<ImageNodeData, 'image'>
 
-export function ImageNode({ data }: NodeProps<ImageNodeType>) {
+export function ImageNode({ data, selected }: NodeProps<ImageNodeType>) {
   return (
-    <div className="flex w-32 flex-col items-center gap-2 rounded-xl border border-gray-300 bg-white p-3 shadow-lg dark:border-gray-700 dark:bg-gray-800">
+    <div className={`flex w-32 flex-col items-center gap-2 rounded-xl border bg-white p-3 shadow-lg dark:bg-gray-800 ${selected ? 'border-2 border-blue-500' : 'border border-gray-300 dark:border-gray-700'}`}>
       <Handle
         type="target"
-        position={Position.Top}
-        className="bg-indigo-500!"
+        position={Position.Left}
+        className="h-4! w-4! bg-indigo-500!"
       />
       <img
         src={data.src}
@@ -31,8 +31,8 @@ export function ImageNode({ data }: NodeProps<ImageNodeType>) {
       )}
       <Handle
         type="source"
-        position={Position.Bottom}
-        className="bg-indigo-500!"
+        position={Position.Right}
+        className="h-4! w-4! bg-indigo-500!"
       />
     </div>
   )

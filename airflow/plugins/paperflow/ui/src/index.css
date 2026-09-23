@@ -59,3 +59,99 @@
 .dark .react-flow__attribution a {
   color: #9ca3af;
 }
+
+.hljs {
+  color: inherit;
+  background: transparent;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-literal,
+.hljs-type,
+.hljs-name,
+.hljs-section,
+.hljs-selector-tag {
+  color: var(--color-brand-purple);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-built_in {
+  color: var(--color-brand-teal);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-attribute,
+.hljs-addition {
+  color: var(--color-brand-green);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-meta {
+  color: var(--color-brand-orange);
+}
+
+.hljs-operator,
+.hljs-punctuation {
+  color: var(--color-slate);
+}
+
+.hljs-params {
+  color: #b45309;
+}
+
+.dark .hljs-comment,
+.dark .hljs-quote {
+  color: #9ca3af;
+}
+
+.dark .hljs-keyword,
+.dark .hljs-literal,
+.dark .hljs-type,
+.dark .hljs-name,
+.dark .hljs-section,
+.dark .hljs-selector-tag {
+  color: var(--color-brand-purple-300);
+}
+
+.dark .hljs-title,
+.dark .hljs-title.function_,
+.dark .hljs-built_in {
+  color: #5eead4;
+}
+
+.dark .hljs-string,
+.dark .hljs-regexp,
+.dark .hljs-attribute,
+.dark .hljs-addition {
+  color: #86efac;
+}
+
+.dark .hljs-number,
+.dark .hljs-symbol,
+.dark .hljs-bullet,
+.dark .hljs-variable,
+.dark .hljs-template-variable,
+.dark .hljs-meta {
+  color: #fbbf24;
+}
+
+.dark .hljs-operator,
+.dark .hljs-punctuation {
+  color: #94a3b8;
+}
+
+.dark .hljs-params {
+  color: #fdba74;
+}

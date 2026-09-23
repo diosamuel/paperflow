@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -9,14 +10,33 @@ import {
 import * as Blockly from 'blockly'
 import 'blockly/blocks'
 import { pythonGenerator } from 'blockly/python'
+import hljs from 'highlight.js/lib/core'
+import python from 'highlight.js/lib/languages/python'
 
+import '../blocks/dagConfig'
 import { toolbox } from '../toolbox'
+
+hljs.registerLanguage('python', python)
 
 const EMPTY_CODE = '# Drag blocks to generate Python'
 const MIN_CODE_WIDTH = 160
 const MIN_WORKSPACE_WIDTH = 220
 
 const PRESET_VARIABLES = ['temperature', 'humidity']
+const STORAGE_KEY_BLOCKLY = 'paperflow:blockly'
+
+function loadBlocklyState(): object | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_BLOCKLY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveBlocklyState(state: object) {
+  localStorage.setItem(STORAGE_KEY_BLOCKLY, JSON.stringify(state))
+}
 
 type BlocklyEditorProps = {
   onWorkspace?: (workspace: Blockly.WorkspaceSvg | null) => void
@@ -36,6 +56,11 @@ export function BlocklyEditor({
   const [code, setCode] = useState(EMPTY_CODE)
   const [codeWidth, setCodeWidth] = useState(() =>
     Math.max(MIN_CODE_WIDTH, Math.round(window.innerWidth * 0.3)),
+  )
+
+  const highlightedCode = useMemo(
+    () => hljs.highlight(code, { language: 'python' }).value,
+    [code],
   )
 
   useEffect(() => {
@@ -60,11 +85,21 @@ export function BlocklyEditor({
     const variableMap = workspace.getVariableMap()
     for (const name of PRESET_VARIABLES) variableMap.createVariable(name)
 
+    const saved = loadBlocklyState()
+    if (saved) {
+      Blockly.serialization.workspaces.load(saved, workspace)
+    }
+
     onWorkspaceRef.current?.(workspace)
 
     const updateCode = () => {
       const generated = pythonGenerator.workspaceToCode(workspace)
       setCode(generated.trim() || EMPTY_CODE)
+    }
+
+    const saveWorkspace = () => {
+      const state = Blockly.serialization.workspaces.save(workspace)
+      saveBlocklyState(state)
     }
 
     const onDelete = (event: Blockly.Events.Abstract) => {
@@ -76,6 +111,7 @@ export function BlocklyEditor({
 
     updateCode()
     workspace.addChangeListener(updateCode)
+    workspace.addChangeListener(saveWorkspace)
     workspace.addChangeListener(onDelete)
 
     const resize = () => Blockly.svgResize(workspace)
@@ -85,6 +121,7 @@ export function BlocklyEditor({
 
     return () => {
       workspace.removeChangeListener(updateCode)
+      workspace.removeChangeListener(saveWorkspace)
       workspace.removeChangeListener(onDelete)
       observer.disconnect()
       window.removeEventListener('resize', resize)
@@ -154,7 +191,10 @@ export function BlocklyEditor({
           </button>
         </div>
         <pre className="min-h-0 flex-1 overflow-auto bg-gray-50 p-3 text-xs leading-relaxed text-gray-800 dark:bg-gray-900 dark:text-gray-100">
-          <code>{code}</code>
+          <code
+            className="hljs"
+            dangerouslySetInnerHTML={{ __html: highlightedCode }}
+          />
         </pre>
       </div>
     </div>
