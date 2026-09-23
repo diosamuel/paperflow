@@ -1,32 +1,22 @@
-import json
 import time
-from datetime import datetime, timezone
 
 import board
 import adafruit_dht
 import paho.mqtt.client as mqtt
 from gpiozero import Button, LED
 
-# --- custom broker: fill these in -------------------------------
 BROKER_HOST = "broker.mqtt.cool"
 BROKER_PORT = 1883
 MQTT_USERNAME = ""
 MQTT_PASSWORD = ""
 CLIENT_ID = "paperflow-pi"
-# ---------------------------------------------------------------
-
 PUBLISH_INTERVAL = 5
-TOPIC_TEMPERATURE = "paperflow/sensor/temperature"
-TOPIC_HUMIDITY = "paperflow/sensor/humidity"
+TOPIC_SENSOR = "paperflow/sensor"
 TOPIC_BUTTONS = "paperflow/sensor/buttons"
 TOPIC_ACTUATOR = "paperflow/actuator/+"
 
 LED_PINS = {"red": 27, "yellow": 22, "green": 17}
-BUTTON_PINS = {"b1": 6, "b2": 13, "b3": 19}
-
-
-def utcNow():
-    return datetime.now(timezone.utc).isoformat()
+BUTTON_PINS = {"blueButton": 13}
 
 
 def readSensor(dht):
@@ -39,16 +29,15 @@ def readSensor(dht):
         return {"temperature": None, "humidity": None}
 
 
-def onButton(name, pressed, client, buttons):
+def onButton(name, pressed, client):
     print(f"[button] {name} {'pressed' if pressed else 'released'}")
-    payload = {buttonName: button.is_pressed for buttonName, button in buttons.items()}
-    client.publish(TOPIC_BUTTONS, json.dumps(payload))
+    client.publish(TOPIC_BUTTONS, f"button={pressed}")
 
 
 def setupButtons(client, buttons):
     for name, button in buttons.items():
-        button.when_pressed = lambda n=name: onButton(n, True, client, buttons)
-        button.when_released = lambda n=name: onButton(n, False, client, buttons)
+        button.when_pressed = lambda n=name: onButton(n, True, client)
+        button.when_released = lambda n=name: onButton(n, False, client)
 
 
 def handleActuator(topic, payload, leds):
@@ -57,11 +46,12 @@ def handleActuator(topic, payload, leds):
     if led is None:
         print(f"[mqtt] no LED for {color}")
         return
-    action = str(payload.get("action", "")).upper()
-    if action == "ON":
+    if payload.lower() == "on=true":
         led.on()
-    elif action == "OFF":
+    elif payload.lower() == "on=false":
         led.off()
+    else:
+        print(f"[mqtt] unknown payload: {payload!r}")
 
 
 def onConnect(client, userdata, flags, reasonCode, properties):
@@ -70,9 +60,8 @@ def onConnect(client, userdata, flags, reasonCode, properties):
 
 
 def onMessage(client, userdata, msg):
-    raw = msg.payload.decode()
-    print(f"[mqtt] {msg.topic} -> {raw}")
-    payload = json.loads(raw) if raw else {}
+    payload = msg.payload.decode()
+    print(f"[mqtt] {msg.topic} -> {payload}")
     handleActuator(msg.topic, payload, userdata)
 
 
@@ -102,27 +91,12 @@ def main():
     while True:
         reading = readSensor(dht)
         if reading["temperature"] is not None:
-            client.publish(
-                TOPIC_TEMPERATURE,
-                json.dumps(
-                    {
-                        "value": reading["temperature"],
-                        "unit": "celsius",
-                        "timestamp": utcNow(),
-                    }
-                ),
+            message = (
+                f"temp={reading['temperature']};"
+                f"humid={reading['humidity']};"
+                f"ts={int(time.time())}"
             )
-        if reading["humidity"] is not None:
-            client.publish(
-                TOPIC_HUMIDITY,
-                json.dumps(
-                    {
-                        "value": reading["humidity"],
-                        "unit": "percent",
-                        "timestamp": utcNow(),
-                    }
-                ),
-            )
+            client.publish(TOPIC_SENSOR, message)
         time.sleep(PUBLISH_INTERVAL)
 
 
