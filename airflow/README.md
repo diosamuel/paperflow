@@ -117,7 +117,7 @@ uv run airflow dags test llm_ai_demo 2025-01-01
 
 ### Coding agent: Blockly pseudocode -> Airflow DAG
 
-`dags/agent_tools_demo.py` shows `@task.agent` as a **coding agent**: it converts
+`dags/auto_generate_dag.py` shows `@task.agent` as a **coding agent**: it converts
 Blockly-generated pseudocode into a real Airflow DAG, then validates its own work
 in a loop. The validators are a custom pydantic-ai `FunctionToolset` the model
 must call in order:
@@ -174,7 +174,7 @@ agent fails instead of running forever; tool calls are logged by default
 (`enable_tool_logging=True`). Run it with:
 
 ```bash
-uv run airflow dags test agent_tools_demo 2025-01-01
+uv run airflow dags test auto_generate_dag 2025-01-01
 ```
 
 ## HITL demo

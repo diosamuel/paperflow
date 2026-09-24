@@ -157,7 +157,7 @@ BLOCKLY_DIR = Path(
 AIRFLOW_API_URL = os.getenv("AIRFLOW_API_URL", "http://localhost:8080")
 AIRFLOW_API_USERNAME = os.getenv("AIRFLOW_API_USERNAME", "admin")
 AIRFLOW_API_PASSWORD = os.getenv("AIRFLOW_API_PASSWORD", "admin")
-AIRFLOW_DAG_ID = os.getenv("AIRFLOW_DAG_ID", "agent_tools_demo")
+AIRFLOW_DAG_ID = os.getenv("AIRFLOW_DAG_ID", "auto_generate_dag")
 
 REQUEST_TIMEOUT = 5
 

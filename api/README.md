@@ -63,7 +63,7 @@ MQTT_STALE_AFTER_SECONDS=15
 AIRFLOW_API_URL=http://localhost:8080
 AIRFLOW_API_USERNAME=admin
 AIRFLOW_API_PASSWORD=admin
-AIRFLOW_DAG_ID=agent_tools_demo
+AIRFLOW_DAG_ID=auto_generate_dag
 ```
 
 ### 3. Run the API Server
@@ -173,7 +173,7 @@ This is what the builder's **Wiring** page sidebar consumes via `EventSource`.
 
 ### 8. `POST /save`
 Writes Blockly-generated Python into the repo-root `blockly_dags/` folder, where
-`airflow/dags/agent_tools_demo.py` picks it up and has the LLM agent convert it
+`airflow/dags/auto_generate_dag.py` picks it up and has the LLM agent convert it
 into a real DAG.
 
 - **Body (JSON):**
@@ -193,7 +193,7 @@ the Airflow API (`POST /auth/token`) and creates a DAG run
 (`POST /api/v2/dags/{AIRFLOW_DAG_ID}/dagRuns`), which rewrites the source into a
 real DAG. Configuration: `AIRFLOW_API_URL` (default `http://localhost:8080`),
 `AIRFLOW_API_USERNAME` / `AIRFLOW_API_PASSWORD` (default `admin` / `admin`),
-`AIRFLOW_DAG_ID` (default `agent_tools_demo`). A failed trigger does not fail the
+`AIRFLOW_DAG_ID` (default `auto_generate_dag`). A failed trigger does not fail the
 save — it is reported in `airflow`.
 
 - **Example response:**

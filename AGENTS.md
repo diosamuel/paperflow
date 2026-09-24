@@ -46,7 +46,7 @@ paperflow/
 │   ├── constraints.txt     # official constraints-3.3.2 for py3.12
 │   ├── .python-version     # 3.12
 │   ├── README.md           # setup/run commands
-│   ├── dags/               # paperflow_dag.py (mock branch), led_sensor_demo.py (real IoT via api/), llm_ai_demo.py (common.ai / OpenAI-spec), agent_tools_demo.py (custom tool), hitl_approval_demo.py
+│   ├── dags/               # paperflow_dag.py (mock branch), led_sensor_demo.py (real IoT via api/), llm_ai_demo.py (common.ai / OpenAI-spec), auto_generate_dag.py (custom tool), hitl_approval_demo.py
 │   └── plugins/
 │       ├── .airflowignore      # prunes node_modules/dist from plugin scan
 │       └── paperflow/
@@ -121,7 +121,7 @@ Interactive docs: `http://localhost:8000/docs`. Endpoints: `GET /` (welcome),
 `paperflow/actuator/{color}`), `GET /iot/stream` (SSE push of every reading,
 consumed by the builder's Wiring page), and `POST /save` (the builder writes its
 generated Python into repo-root `blockly_dags/`, then triggers the
-`agent_tools_demo` DAG via the Airflow API so the agent converts it).
+`auto_generate_dag` DAG via the Airflow API so the agent converts it).
 
 `mqtt_bridge.py` runs one paho client with the app's lifespan (started in
 `main.py`), subscribing to `paperflow/sensor` and `paperflow/sensor/buttons` and
@@ -332,7 +332,7 @@ history is in git (`b66541a`) if the old `vision_api_daily_dag.py` is needed.
 
 **Missing / next:**
 - No Workflow IR: the paper/IR design in `PLAN.md` Part I is unimplemented. The
-  canvas → real-DAG bridge exists without one, as `airflow/dags/agent_tools_demo.py`
+  canvas → real-DAG bridge exists without one, as `airflow/dags/auto_generate_dag.py`
   (reads the newest `blockly_dags/*.py`, has the LLM agent rewrite it behind
   checkAST/compilePython/checkDAGValid, then — after a human `ApprovalOperator`
   gate — writes `airflow/dags/blockly_<id>.py`). The UI only saves the source; it

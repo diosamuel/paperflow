@@ -90,7 +90,7 @@ class GeneratedDag(BaseModel):
     summary: str
 
 @dag(
-    dag_id="agent_tools_demo",
+    dag_id="auto_generate_dag",
     description="Coding agent: Blockly pseudocode -> real Airflow DAG, validated by AST/compile/DagBag tools.",
     schedule=None,
     start_date=datetime(2025, 1, 1),
