@@ -14,7 +14,7 @@ export function ImageNode({ data, selected }: NodeProps<ImageNodeType>) {
       <Handle
         type="target"
         position={Position.Left}
-        className="h-4! w-4! bg-indigo-500!"
+        className="h-4! w-4! bg-primary!"
       />
       <img
         src={data.src}
@@ -32,7 +32,7 @@ export function ImageNode({ data, selected }: NodeProps<ImageNodeType>) {
       <Handle
         type="source"
         position={Position.Right}
-        className="h-4! w-4! bg-indigo-500!"
+        className="h-4! w-4! bg-primary!"
       />
     </div>
   )

@@ -171,7 +171,7 @@ export function BlocklyEditor({
       />
       <div
         onPointerDown={startResize}
-        className="group hidden cursor-col-resize touch-none items-center justify-center bg-gray-200 transition-colors hover:bg-indigo-400 md:flex md:w-2 md:shrink-0 dark:bg-gray-800 dark:hover:bg-indigo-500"
+        className="group hidden cursor-col-resize touch-none items-center justify-center bg-gray-200 transition-colors hover:bg-primary-hover md:flex md:w-2 md:shrink-0 dark:bg-gray-800 dark:hover:bg-primary"
       >
         <div className="h-10 w-0.5 rounded-full bg-gray-400 group-hover:bg-white dark:bg-gray-600" />
       </div>
@@ -189,7 +189,7 @@ export function BlocklyEditor({
                 ? 'Validate the workflow against your blocks'
                 : 'Not implemented yet'
             }
-            className="rounded-md bg-indigo-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-400 active:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-primary-hover active:bg-primary-pressed disabled:cursor-not-allowed disabled:opacity-50"
           >
             Validate Code
           </button>

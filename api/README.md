@@ -154,7 +154,26 @@ curl -X POST "http://localhost:8000/iot/led/red" \
 }
 ```
 
-### 7. `GET /iot/stream`
+### 7. `GET /iot/leds`
+Last commanded state of each LED (`{"red": false, "yellow": false, "green": false}`).
+This is what the API itself published — the Pi does not report LED state back. The
+same data rides on `/iot/stream`, both in the opening `snapshot` and as a
+`{"type": "leds"}` event whenever a command goes out.
+
+### 8. `POST /iot/button`
+Publishes a button press/release as the Raspberry Pi would — useful for demos with
+no hardware wired up.
+
+- **Body (JSON):**
+  ```json
+  { "pressed": true }
+  ```
+  Publishes `button=true` / `button=false` on `paperflow/sensor/buttons`. The
+  broker echoes it back to the API's own subscription, so it lands in
+  `GET /iot/buttons` and in the SSE log exactly like a real press. Returns `503`
+  if the MQTT broker is not connected.
+
+### 9. `GET /iot/stream`
 Server-Sent Events (SSE) stream. On connect it sends one `snapshot` event with the
 current state, then one `message` event for every reading the Raspberry Pi pushes
 (a `: keep-alive` comment every 15s keeps the connection open).
@@ -171,7 +190,7 @@ data: {"type": "message", "topic": "paperflow/sensor", "received_at": 1690000000
 
 This is what the builder's **Wiring** page sidebar consumes via `EventSource`.
 
-### 8. `POST /save`
+### 10. `POST /save`
 Writes Blockly-generated Python into the repo-root `blockly_dags/` folder, where
 `airflow/dags/auto_generate_dag.py` picks it up and has the LLM agent convert it
 into a real DAG.
@@ -206,7 +225,7 @@ save — it is reported in `airflow`.
 }
 ```
 
-### 9. Interactive Swagger UI
+### 11. Interactive Swagger UI
 Open your browser at:
 `http://localhost:8000/docs`
 

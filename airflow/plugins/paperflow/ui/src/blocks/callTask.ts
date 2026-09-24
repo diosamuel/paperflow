@@ -5,7 +5,7 @@ import { TASK_BLOCK } from './task'
 
 export const CALL_TASK_VALUE_BLOCK = 'call_task_value'
 
-const COLOR = '#7b3ff2'
+const COLOR = '#017CEE'
 
 export function taskNameOptions(
   this: Blockly.FieldDropdown,

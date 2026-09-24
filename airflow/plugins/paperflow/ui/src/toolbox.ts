@@ -18,8 +18,8 @@ export const toolbox = {
   kind: 'categoryToolbox' as const,
   contents: [
     category('DAG Config', '#2a7de1', [DAG_BLOCK]),
-    category('Tasks', '#7b3ff2', [CALL_TASK_VALUE_BLOCK]),
-    category('Sensors & LEDs', '#7b3ff2', [
+    category('Tasks', '#017CEE', [CALL_TASK_VALUE_BLOCK]),
+    category('Sensors & LEDs', '#017CEE', [
       TEMPERATURE_SENSOR_BLOCK,
       HUMIDITY_SENSOR_BLOCK,
       LED_BLOCK,

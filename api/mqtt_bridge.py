@@ -61,6 +61,7 @@ class MqttBridge:
         self._sensorAt: Optional[float] = None
         self._buttons: Optional[dict[str, Any]] = None
         self._buttonsAt: Optional[float] = None
+        self._leds: dict[str, bool] = {color: False for color in self.ledColors}
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._subscribers: set[asyncio.Queue[dict[str, Any]]] = set()
 
@@ -177,12 +178,37 @@ class MqttBridge:
         snapshot["connected"] = connected
         return snapshot
 
+    def ledsSnapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {"connected": self._connected, "data": dict(self._leds)}
+
     def publishLed(self, color: str, on: bool) -> dict[str, Any]:
         topic = f"{self.actuatorPrefix}/{color}"
         payload = "on=true" if on else "on=false"
         result = self._client.publish(topic, payload, qos=1)
+
+        with self._lock:
+            self._leds[color] = on
+            leds = dict(self._leds)
+        self._emit({"type": "leds", "data": leds})
+
         return {
             "topic": topic,
+            "payload": payload,
+            "mid": result.mid,
+            "rc": result.rc,
+        }
+
+    def publishButton(self, pressed: bool) -> dict[str, Any]:
+        """Publish a button press/release, as the Raspberry Pi would.
+
+        The broker echoes it back to our own subscription, so the cache and the
+        SSE stream update through the normal message path.
+        """
+        payload = f"button={pressed}"
+        result = self._client.publish(self.buttonsTopic, payload, qos=1)
+        return {
+            "topic": self.buttonsTopic,
             "payload": payload,
             "mid": result.mid,
             "rc": result.rc,

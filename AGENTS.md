@@ -117,8 +117,10 @@ Configuration comes from the repo-root `.env`, which `main.py` loads explicitly.
 Interactive docs: `http://localhost:8000/docs`. Endpoints: `GET /` (welcome),
 `GET /health` (MQTT connectivity), `GET /iot` (combined sensor + button snapshot),
 `GET /iot/sensor` (latest `temp`/`humid` from `paperflow/sensor`),
-`GET /iot/buttons`, `POST /iot/led/{color}` (publishes `on=true`/`on=false` to
-`paperflow/actuator/{color}`), `GET /iot/stream` (SSE push of every reading,
+`GET /iot/buttons`, `GET /iot/leds` (last commanded LED state),
+`POST /iot/led/{color}` (publishes `on=true`/`on=false` to
+`paperflow/actuator/{color}`), `POST /iot/button` (publishes a press/release as the
+Pi would), `GET /iot/stream` (SSE push of every reading,
 consumed by the builder's Wiring page), and `POST /save` (the builder writes its
 generated Python into repo-root `blockly_dags/`, then triggers the
 `auto_generate_dag` DAG via the Airflow API so the agent converts it).
@@ -160,9 +162,12 @@ The builder is an Airflow **plugin**, not a standalone site: Vite builds it and
 `@tailwindcss/vite`), `@xyflow/react` (React Flow v12), `blockly` v13, `react-router-dom` v7, oxlint.
 
 Routing lives in `src/main.tsx`: `/` renders `pages/Builder.tsx`, `/wiring` renders
-`pages/Wiring.tsx`. The Wiring page is a fixed 1440×900 canvas (Pi PNG + breadboard
-+ SVG jumper wires) with a right sidebar that streams `GET /iot/stream` (SSE) from
-the IoT API into a live log. The API base defaults to `http://localhost:8000`
+`pages/Wiring.tsx`. The Wiring page is a **read-only React Flow canvas** (Pi +
+breadboard image nodes, the 24 red hotspot boxes, 13 red wire edges and 4 LED/
+sensor illustrations copied from `airflow/position.svg` — the wire endpoints snap
+to the nearest contact block) with a right sidebar
+that streams `GET /iot/stream` (SSE) from the IoT API into a live log. The API
+base defaults to `http://localhost:8000`
 and can be overridden with the `VITE_API_BASE` env var at build time.
 
 **`src/pages/Builder.tsx`**:

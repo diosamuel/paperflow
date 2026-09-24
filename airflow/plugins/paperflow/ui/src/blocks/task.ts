@@ -33,7 +33,7 @@ Blockly.defineBlocksWithJsonArray([
     ],
     previousStatement: null,
     nextStatement: null,
-    colour: '#7b3ff2',
+    colour: '#017CEE',
     tooltip:
       'One task. Blocks inside run when this task runs, and the returned value is passed on like an Airflow XCom.',
   },
@@ -49,11 +49,15 @@ export function slugify(raw: string): string {
   return cleaned || 'task'
 }
 
-function uniqueTaskName(workspace: Blockly.Workspace, base: string): string {
+function uniqueTaskName(
+  workspace: Blockly.Workspace,
+  base: string,
+  excludeId?: string,
+): string {
   const taken = new Set(
     workspace
       .getAllBlocks(false)
-      .filter((block) => block.type === TASK_BLOCK)
+      .filter((block) => block.type === TASK_BLOCK && block.id !== excludeId)
       .map((block) => block.getFieldValue('NAME') as string),
   )
 
@@ -62,6 +66,12 @@ function uniqueTaskName(workspace: Blockly.Workspace, base: string): string {
   let suffix = 2
   while (taken.has(`${base}_${suffix}`)) suffix += 1
   return `${base}_${suffix}`
+}
+
+export function renameTaskBlock(block: Blockly.Block, label: string): string {
+  const name = uniqueTaskName(block.workspace, slugify(label), block.id)
+  block.setFieldValue(name, 'NAME')
+  return name
 }
 
 pythonGenerator.forBlock[TASK_BLOCK] = (block) => {

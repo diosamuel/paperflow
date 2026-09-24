@@ -71,6 +71,7 @@ def getIotData():
         "status": "success",
         "sensor": bridge.sensorSnapshot(),
         "buttons": bridge.buttonsSnapshot(),
+        "leds": bridge.ledsSnapshot(),
     }
 
 
@@ -84,6 +85,12 @@ def getSensorData():
 def getButtonsData():
     """Latest button press/release state published by the Raspberry Pi."""
     return {"status": "success", **bridge.buttonsSnapshot()}
+
+
+@app.get("/iot/leds")
+def getLedsData():
+    """Last commanded state of each Raspberry Pi LED."""
+    return {"status": "success", **bridge.ledsSnapshot()}
 
 
 @app.get("/iot/stream")
@@ -101,6 +108,7 @@ async def streamIotData():
                     "type": "snapshot",
                     "sensor": bridge.sensorSnapshot(),
                     "buttons": bridge.buttonsSnapshot(),
+                    "leds": bridge.ledsSnapshot()["data"],
                 }
             )
             while True:
@@ -145,6 +153,24 @@ def setLed(color: str, command: LedCommand):
         "status": "success",
         "color": color,
         "on": command.on,
+        **result,
+    }
+
+
+class ButtonCommand(BaseModel):
+    pressed: bool = True
+
+
+@app.post("/iot/button")
+def pressButton(command: ButtonCommand):
+    """Publish a button press/release as the Raspberry Pi would, for demos without hardware."""
+    if not bridge.isConnected():
+        raise HTTPException(status_code=503, detail="MQTT broker not connected.")
+
+    result = bridge.publishButton(command.pressed)
+    return {
+        "status": "success",
+        "pressed": command.pressed,
         **result,
     }
 

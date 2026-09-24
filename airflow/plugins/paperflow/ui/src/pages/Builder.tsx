@@ -30,7 +30,12 @@ import '@xyflow/react/dist/style.css'
 import type { WorkspaceSvg } from 'blockly'
 import { pythonGenerator } from 'blockly/python'
 
-import { TASK_BLOCK, appendTaskBlock, slugify } from '../blocks/task'
+import {
+  TASK_BLOCK,
+  appendTaskBlock,
+  renameTaskBlock,
+  slugify,
+} from '../blocks/task'
 import { BlocklyEditor } from '../components/BlocklyEditor'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import {
@@ -39,6 +44,7 @@ import {
   type ValidationCheck,
 } from '../components/ResultDialog'
 import { TaskNode, type TaskNodeType } from '../nodes/TaskNode'
+import { TaskActionsContext } from '../nodes/taskActions'
 import {
   ImageNode,
   type ImageNodeData,
@@ -271,12 +277,12 @@ function Flow({
   )
 
   const handleAddTask = useCallback(() => {
-    onAddTask(
-      getCenterPosition(),
-      taskText.trim() || `Task ${nodes.length + 1}`,
-    )
+    const label = taskText.trim()
+    if (!label) return
+
+    onAddTask(getCenterPosition(), label)
     setTaskText('')
-  }, [getCenterPosition, nodes.length, onAddTask, taskText])
+  }, [getCenterPosition, onAddTask, taskText])
 
   const isValidConnection = useCallback(
     (connection: Edge | Connection) => {
@@ -300,6 +306,7 @@ function Flow({
       nodeTypes={nodeTypes}
       isValidConnection={isValidConnection}
       deleteKeyCode={['Backspace', 'Delete']}
+      zoomOnDoubleClick={false}
       fitView
       className="h-full w-full bg-gray-50 dark:bg-gray-900"
     >
@@ -311,12 +318,13 @@ function Flow({
               value={taskText}
               onChange={(event) => setTaskText(event.target.value)}
               placeholder="Task name"
-              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
+              className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-primary focus:outline-none dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:placeholder:text-gray-500"
             />
             <button
               type="button"
               onClick={handleAddTask}
-              className="rounded-lg bg-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-indigo-400 active:bg-indigo-600"
+              disabled={!taskText.trim()}
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-primary-hover active:bg-primary-pressed disabled:cursor-not-allowed disabled:opacity-50"
             >
               + Add Task
             </button>
@@ -346,7 +354,7 @@ function Flow({
                     className={`flex flex-col items-center gap-1 rounded-lg border border-gray-300 bg-gray-50 p-1.5 transition-colors dark:border-gray-700 dark:bg-gray-900 ${
                       isUsed
                         ? 'cursor-not-allowed opacity-50'
-                        : 'hover:border-indigo-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+                        : 'hover:border-primary hover:bg-gray-100 dark:hover:bg-gray-700'
                     }`}
                   >
                     <img
@@ -635,6 +643,33 @@ function Builder() {
     [setNodes],
   )
 
+  const handleRenameTask = useCallback(
+    (nodeId: string, label: string) => {
+      const blockId = nodeToBlockRef.current.get(nodeId)
+      const block = blockId
+        ? workspaceRef.current?.getBlockById(blockId)
+        : null
+      const blockName = block ? renameTaskBlock(block, label) : undefined
+
+      setNodes((nds) =>
+        nds.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                data: {
+                  ...node.data,
+                  label,
+                  blockName:
+                    blockName ?? (node.data as TaskNodeType['data']).blockName,
+                },
+              }
+            : node,
+        ),
+      )
+    },
+    [setNodes],
+  )
+
   const handleAddImage = useCallback(
     (position: XYPosition, src: string, label: string) => {
       setNodes((nds) => {
@@ -769,22 +804,24 @@ function Builder() {
     >
       <div className="min-h-0 flex-1">
         <ReactFlowProvider>
-          <Flow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onBeforeDelete={handleBeforeDelete}
-            onNodesDelete={handleNodesDeleted}
-            onAddTask={handleAddTask}
-            onAddImage={handleAddImage}
-          />
+          <TaskActionsContext.Provider value={{ renameTask: handleRenameTask }}>
+            <Flow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onBeforeDelete={handleBeforeDelete}
+              onNodesDelete={handleNodesDeleted}
+              onAddTask={handleAddTask}
+              onAddImage={handleAddImage}
+            />
+          </TaskActionsContext.Provider>
         </ReactFlowProvider>
       </div>
       <div
         onPointerDown={startResize}
-        className="group flex h-2 shrink-0 cursor-row-resize touch-none items-center justify-center border-y border-gray-300 bg-gray-200 transition-colors hover:bg-indigo-400 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-indigo-500"
+        className="group flex h-2 shrink-0 cursor-row-resize touch-none items-center justify-center border-y border-gray-300 bg-gray-200 transition-colors hover:bg-primary-hover dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-primary"
       >
         <div className="h-0.5 w-10 rounded-full bg-gray-400 group-hover:bg-white dark:bg-gray-600" />
       </div>
