@@ -128,8 +128,8 @@ def agentToolsDemo():
 
         validateDagCode(result.code)
         dag_id = extractDagId(result.code)
-        if not dag_id or not dag_id.startswith("blockly_"):
-            raise ValueError(f"DAG id must start with 'blockly_', got {dag_id!r}")
+        if not dag_id:
+            raise ValueError(f"No dag_id found in the generated code, got {dag_id!r}")
         path = Path(conf.get("core", "dags_folder")) / f"{dag_id}.py"
         path.write_text(result.code)
         print(f"{result.summary}\nwrote {path}")
@@ -140,7 +140,9 @@ def agentToolsDemo():
     approve = ApprovalOperator(
         task_id="approveDag",
         subject="Write this generated DAG to airflow/dags?",
-        body="{{ ti.xcom_pull(task_ids='generateDag').code }}",
+        body="""```python
+{{ ti.xcom_pull(task_ids='generateDag').code }}
+```""",
         response_timeout=timedelta(hours=1),
     )
 

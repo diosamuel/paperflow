@@ -57,7 +57,7 @@ const AVAILABLE_IMAGES = [
   { src: 'humid-sensor.png', label: 'Humid Sensor' },
   // { src: 'soil-sensor.png', label: 'Soil Sensor' },
   { src: 'red-led.png', label: 'Red LED' },
-  { src: 'blue-led.png', label: 'Blue LED' },
+  { src: 'yellow-led.png', label: 'Yellow LED' },
   { src: 'green-led.png', label: 'Green LED' },
 ]
 
@@ -91,10 +91,10 @@ const initialNodes: Node[] = [
     data: { src: 'red-led.png', alt: 'Red LED', label: 'Red LED' },
   } satisfies ImageNodeType,
   {
-    id: 'blue-led',
+    id: 'yellow-led',
     type: 'image',
     position: { x: 360, y: COLUMN_GAP },
-    data: { src: 'blue-led.png', alt: 'Blue LED', label: 'Blue LED' },
+    data: { src: 'yellow-led.png', alt: 'Yellow LED', label: 'Yellow LED' },
   } satisfies ImageNodeType,
   {
     id: 'green-led',
@@ -156,7 +156,7 @@ const COMPONENT_BY_SRC: Record<string, string> = {
   'temp-sensor.png': 'temperature',
   'humid-sensor.png': 'humidity',
   'red-led.png': 'led:red',
-  'blue-led.png': 'led:blue',
+  'yellow-led.png': 'led:yellow',
   'green-led.png': 'led:green',
 }
 
@@ -164,7 +164,7 @@ const COMPONENT_LABELS: Record<string, string> = {
   temperature: 'Temp Sensor',
   humidity: 'Humid Sensor',
   'led:red': 'Red LED',
-  'led:blue': 'Blue LED',
+  'led:yellow': 'Yellow LED',
   'led:green': 'Green LED',
 }
 
@@ -457,7 +457,7 @@ function Builder() {
     [setEdges],
   )
 
-  const handleGenerateDag = useCallback(async () => {
+  const handleValidate = useCallback(() => {
     const workspace = workspaceRef.current
     if (!workspace) return
 
@@ -517,11 +517,12 @@ function Builder() {
     }
 
     setValidationChecks(checks)
+    setSaveState(null)
+  }, [edges, nodes])
 
-    if (checks.length === 0 || !checks.every((check) => check.ok)) {
-      setSaveState(null)
-      return
-    }
+  const handleSaveDag = useCallback(async () => {
+    const workspace = workspaceRef.current
+    if (!workspace) return
 
     const dagBlock = workspace
       .getAllBlocks(false)
@@ -543,10 +544,24 @@ function Builder() {
       })
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
-      const saved = (await response.json()) as { filename: string }
+      const saved = (await response.json()) as {
+        filename: string
+        airflow?: { triggered: boolean; dag_run_id?: string; error?: string }
+      }
+
+      if (saved.airflow && !saved.airflow.triggered) {
+        setSaveState({
+          status: 'error',
+          message: `Saved blockly_dags/${saved.filename}, but the Airflow run did not start: ${saved.airflow.error}`,
+        })
+        return
+      }
+
       setSaveState({
         status: 'saved',
-        message: `Saved blockly_dags/${saved.filename}`,
+        message: saved.airflow?.dag_run_id
+          ? `Saved blockly_dags/${saved.filename} · started ${saved.airflow.dag_run_id}`
+          : `Saved blockly_dags/${saved.filename}`,
       })
     } catch (error) {
       setSaveState({
@@ -554,7 +569,7 @@ function Builder() {
         message: `Could not save: ${(error as Error).message}`,
       })
     }
-  }, [edges, nodes])
+  }, [])
 
   const handleWorkspace = useCallback((workspace: WorkspaceSvg | null) => {
     workspaceRef.current = workspace
@@ -780,7 +795,7 @@ function Builder() {
         <BlocklyEditor
           onWorkspace={handleWorkspace}
           onBlockDelete={handleBlockDeleted}
-          onGenerateDag={handleGenerateDag}
+          onGenerateDag={handleValidate}
         />
       </div>
       <ConfirmDialog
@@ -798,10 +813,7 @@ function Builder() {
           setValidationChecks(null)
           setSaveState(null)
         }}
-        onGenerate={() => {
-          setValidationChecks(null)
-          setSaveState(null)
-        }}
+        onGenerate={handleSaveDag}
       />
     </div>
   )

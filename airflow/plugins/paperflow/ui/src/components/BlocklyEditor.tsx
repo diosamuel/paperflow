@@ -186,12 +186,12 @@ export function BlocklyEditor({
             disabled={!onGenerateDag}
             title={
               onGenerateDag
-                ? 'Generate an Airflow DAG from this workflow'
+                ? 'Validate the workflow against your blocks'
                 : 'Not implemented yet'
             }
             className="rounded-md bg-indigo-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-indigo-400 active:bg-indigo-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Generate Airflow DAG
+            Validate Code
           </button>
         </div>
         <pre className="min-h-0 flex-1 overflow-auto bg-gray-50 p-3 text-xs leading-relaxed text-gray-800 dark:bg-gray-900 dark:text-gray-100">

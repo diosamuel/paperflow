@@ -13,7 +13,7 @@ Blockly.defineBlocksWithJsonArray([
         name: 'COLOUR',
         options: [
           ['red', 'red'],
-          ['blue', 'blue'],
+          ['yellow', 'yellow'],
           ['green', 'green'],
         ],
       },

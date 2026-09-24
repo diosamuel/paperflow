@@ -2,6 +2,7 @@ import { CALL_TASK_VALUE_BLOCK } from './blocks/callTask'
 import { DAG_BLOCK } from './blocks/dag'
 import { HUMIDITY_SENSOR_BLOCK } from './blocks/humiditySensor'
 import { LED_BLOCK } from './blocks/led'
+import { SLEEP_BLOCK } from './blocks/sleep'
 import { TEMPERATURE_SENSOR_BLOCK } from './blocks/temperatureSensor'
 
 const block = (type: string) => ({ kind: 'block' as const, type })
@@ -22,6 +23,7 @@ export const toolbox = {
       TEMPERATURE_SENSOR_BLOCK,
       HUMIDITY_SENSOR_BLOCK,
       LED_BLOCK,
+      SLEEP_BLOCK,
     ]),
     category('Logic', '#5b80a5', [
       'controls_if',
@@ -36,7 +38,6 @@ export const toolbox = {
     category('Loops', '#5ba55b', [
       'controls_repeat_ext',
       'controls_repeat',
-      'controls_whileUntil',
       'controls_for',
       'controls_forEach',
       'controls_flow_statements',
@@ -72,8 +73,6 @@ export const toolbox = {
       'text_replace',
       'text_reverse',
       'text_print',
-      'text_prompt_ext',
-      'text_prompt',
     ]),
     category('Lists', '#745ba5', [
       'lists_create_empty',

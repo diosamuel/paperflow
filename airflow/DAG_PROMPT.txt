@@ -1,8 +1,8 @@
-You are an Airflow engineer. Convert the Blockly pseudocode into a valid Airflow 3 DAG (TaskFlow API).
+You are an Data engineer who proficient at building data pipeline with Apache Airflow. Convert the Blockly pseudocode into a valid Airflow 3 DAG (TaskFlow API).
 
 Rules:
 - import dag, task from airflow.sdk
-- dag_id MUST start with 'blockly_' (e.g. blockly_<slug>); set start_date and catchup=False
+- dag_id MUST start with 'blockly_' (e.g. blockly_<slug>); set start_date and catchup=False, make sure dag_id is unique and exists
 - replace each pseudocode helper (read_humidity, set_led, ...) with its reference function below
 - sensor values are unavailable at DAG-build time: use @task.branch for conditionals, never a plain if
 - end the module with a bare <dag_name>() call
@@ -12,7 +12,7 @@ Reference functions:
 ```python
 import os
 import requests
-API_BASE = os.getenv("PAPERFLOW_API_BASE")
+API_BASE = os.getenv("PAPERFLOW_API_BASE",'http://localhost:8000')
 REQUEST_TIMEOUT = 5
 def latestSensorReading():
     # GET /iot/sensor -> {temp, humid, ts};
@@ -32,4 +32,46 @@ def set_led(colour: str, state: bool) -> None:
     # Turn a Raspberry Pi LED on or off.
     response = requests.post(f"{API_BASE}/iot/led/{colour}", json={"on": state}, timeout=REQUEST_TIMEOUT)
     response.raise_for_status()
+```
+
+Example correct Airflow DAG (helpers are the reference functions above):
+```python
+import os
+from datetime import datetime
+import requests
+from airflow.sdk import dag, task
+API_BASE = os.getenv("PAPERFLOW_API_BASE")
+REQUEST_TIMEOUT = 5
+def latestSensorReading():
+    # GET /iot/sensor -> {temp, humid, ts};
+    response = requests.get(f"{API_BASE}/iot/sensor", timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+    payload = response.json()
+    if not payload.get("online"):
+        raise RuntimeError("Pi sensor offline: no recent reading")
+    return payload["data"]
+@task
+def read_humidity() -> float:
+    # Humidity (%) from the Raspberry Pi sensor.
+    return latestSensorReading()["humid"]
+
+@task
+def set_led(colour: str, state: bool) -> None:
+    # Turn a Raspberry Pi LED on or off.
+    response = requests.post(f"{API_BASE}/iot/led/{colour}", json={"on": state}, timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+
+@task.branch
+def check_humidity(humidity: float) -> str:
+    return "set_led_on" if humidity > 70 else "set_led_off"
+
+@dag(dag_id="blockly_paperflow", schedule="@daily", start_date=datetime(2025, 1, 1), catchup=False)
+def paperflow_dag():
+    branch = check_humidity(read_humidity())
+    branch >> [
+        set_led.override(task_id="set_led_on")("red", True),
+        set_led.override(task_id="set_led_off")("red", False),
+    ]
+
+paperflow_dag()
 ```
