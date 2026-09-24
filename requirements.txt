@@ -4,9 +4,5 @@ Adafruit-Blinka==9.2.0
 adafruit-circuitpython-dht==4.0.12
 fastapi>=0.110.0
 uvicorn[standard]>=0.28.0
-python-multipart>=0.0.9
-google-genai>=1.0.0
-google-generativeai>=0.8.0
 python-dotenv>=1.0.0
-pillow>=10.0.0
 pydantic>=2.0.0

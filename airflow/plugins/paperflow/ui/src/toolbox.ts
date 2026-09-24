@@ -1,9 +1,5 @@
-import {
-  CALL_TASK_BLOCK,
-  CALL_TASK_VALUE_BLOCK,
-} from './blocks/callTask'
+import { CALL_TASK_VALUE_BLOCK } from './blocks/callTask'
 import { DAG_BLOCK } from './blocks/dag'
-import { DAG_CONFIG_BLOCK } from './blocks/dagConfig'
 import { HUMIDITY_SENSOR_BLOCK } from './blocks/humiditySensor'
 import { LED_BLOCK } from './blocks/led'
 import { TEMPERATURE_SENSOR_BLOCK } from './blocks/temperatureSensor'
@@ -20,8 +16,8 @@ const category = (name: string, colour: string, types: string[]) => ({
 export const toolbox = {
   kind: 'categoryToolbox' as const,
   contents: [
-    category('DAG Config', '#2a7de1', [DAG_BLOCK, DAG_CONFIG_BLOCK]),
-    category('Tasks', '#7b3ff2', [CALL_TASK_BLOCK, CALL_TASK_VALUE_BLOCK]),
+    category('DAG Config', '#2a7de1', [DAG_BLOCK]),
+    category('Tasks', '#7b3ff2', [CALL_TASK_VALUE_BLOCK]),
     category('Sensors & LEDs', '#7b3ff2', [
       TEMPERATURE_SENSOR_BLOCK,
       HUMIDITY_SENSOR_BLOCK,

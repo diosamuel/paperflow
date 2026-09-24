@@ -9,9 +9,15 @@ export type ValidationCheck = {
   ok: boolean
 }
 
+export type SaveState = {
+  status: 'saving' | 'saved' | 'error'
+  message: string
+}
+
 type ResultDialogProps = {
   open: boolean
   checks: ValidationCheck[]
+  save?: SaveState | null
   onClose: () => void
   onGenerate: () => void
 }
@@ -24,6 +30,7 @@ type Row =
 export function ResultDialog({
   open,
   checks,
+  save,
   onClose,
   onGenerate,
 }: ResultDialogProps) {
@@ -162,6 +169,20 @@ export function ResultDialog({
           })}
         </ul>
 
+        {save && (
+          <p
+            className={`mt-3 text-xs ${
+              save.status === 'error'
+                ? 'text-red-600 dark:text-red-400'
+                : save.status === 'saved'
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-gray-500 dark:text-gray-400'
+            }`}
+          >
+            {save.status === 'saving' ? 'Saving to blockly_dags...' : save.message}
+          </p>
+        )}
+
         <div className="mt-4 flex justify-end gap-2">
           {done && allOk ? (
             <>
@@ -177,7 +198,7 @@ export function ResultDialog({
                 onClick={onGenerate}
                 className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-indigo-400 active:bg-indigo-600"
               >
-                Generate DAGs
+                {save?.status === 'saved' ? 'Done' : 'Generate DAGs'}
               </button>
             </>
           ) : (

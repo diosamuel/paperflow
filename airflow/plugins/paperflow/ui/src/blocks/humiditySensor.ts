@@ -16,8 +16,8 @@ Blockly.defineBlocksWithJsonArray([
 pythonGenerator.forBlock[HUMIDITY_SENSOR_BLOCK] = () => {
   const name = pythonGenerator.provideFunction_('read_humidity', [
     'def read_humidity():',
-    '    # Reads the humidity (%) from the Raspberry Pi sensor.',
-    '    return 0.0',
+    '    # read from raspberry pi',
+    '    return humidity',
   ])
 
   return [`${name}()`, Order.FUNCTION_CALL]

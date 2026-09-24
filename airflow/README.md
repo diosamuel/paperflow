@@ -73,46 +73,108 @@ curl -fsSL -o constraints.txt \
   "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.2/constraints-3.12.txt"
 ```
 
-## AI demo (Gemini)
+## AI demo (OpenAI-compatible)
 
-`dags/gemini_ai_demo.py` uses the `common.ai` provider (`apache-airflow-providers-common-ai`,
-built on pydantic-ai) with the `@task.llm`, `@task.agent` and `@task.llm_branch`
-decorators. The provider is installed with the `google` extra:
+`dags/llm_ai_demo.py` uses the `common.ai` provider
+(`apache-airflow-providers-common-ai`, built on pydantic-ai) with the
+`@task.llm`, `@task.agent` and `@task.llm_branch` decorators. It talks to any
+OpenAI-spec endpoint through the provider's `pydanticai` connection type — no
+provider-specific SDK is required, only the `openai` package (already a
+dependency). Because pydantic-ai is OpenAI-spec here, the endpoint can be
+OpenAI, Groq, Mistral, DeepSeek, Ollama, vLLM, or your own compatible service.
+
+Create the connection the DAG expects (`conn_type=pydanticai`; `host` is the
+base URL, the API key goes in the password field, the model in `extra` with the
+`openai:` prefix):
 
 ```bash
-uv add -c constraints.txt "apache-airflow-providers-common-ai[google]==0.9.0"
-```
-
-Create the connection the DAG expects (`conn_type=pydanticai`; the API key goes
-in the password field, the model in `extra`):
-
-```bash
-uv run airflow connections add gemini_default \
+uv run airflow connections add pydanticai_default \
   --conn-type pydanticai \
-  --conn-password "$GEMINI_API_KEY" \
-  --conn-extra '{"model": "google:gemini-2.5-flash"}'
+  --conn-host "https://your-endpoint/v1" \
+  --conn-password "$OPENAI_API_KEY" \
+  --conn-extra '{"model": "openai:gpt-4o-mini"}'
 ```
+
+Use the `openai-chat:` prefix instead of `openai:` when your endpoint only
+implements `/chat/completions` — the `openai:` prefix targets the newer
+`/responses` API.
 
 The model is resolved from `model_id` on the task first, then `extra["model"]`.
-Equivalent env-var form:
+Equivalent env-var (JSON) form:
 
 ```bash
-export AIRFLOW_CONN_GEMINI_DEFAULT="pydanticai://:$GEMINI_API_KEY@?model=google%3Agemini-2.5-flash"
+export AIRFLOW_CONN_PYDANTICAI_DEFAULT='{"conn_type": "pydanticai", "host": "https://your-endpoint/v1", "password": "sk-your-key", "extra": {"model": "openai:gpt-4o-mini"}}'
 ```
 
+The DAG reads the connection id from `PAPERFLOW_LLM_CONN_ID` (default
+`pydanticai_default`) and, by default, takes the model from the connection's
+`extra["model"]`. Set `PAPERFLOW_LLM_MODEL` to override it per run.
 Restart Airflow afterwards — providers are discovered at startup — then run:
 
 ```bash
-uv run airflow dags test gemini_ai_demo 2025-01-01
+uv run airflow dags test llm_ai_demo 2025-01-01
 ```
 
-`dags/gemini_embed_demo.py` covers the embedding step. The provider ships **no**
-`@task.embed`: embedding is `LlamaIndexEmbeddingOperator`, and `LlamaIndexHook`
-only builds OpenAI embedders, so the DAG builds a Gemini embedder in a task. It
-parses without extra packages but needs these to execute:
+### Coding agent: Blockly pseudocode -> Airflow DAG
+
+`dags/agent_tools_demo.py` shows `@task.agent` as a **coding agent**: it converts
+Blockly-generated pseudocode into a real Airflow DAG, then validates its own work
+in a loop. The validators are a custom pydantic-ai `FunctionToolset` the model
+must call in order:
+
+```python
+from pydantic_ai import FunctionToolset
+
+dagTools = FunctionToolset()
+
+
+@dagTools.tool_plain
+def checkAST(code: str) -> str:
+    """Check 1: parse the code with Python's ast module."""
+    try:
+        ast.parse(code)
+    except SyntaxError as error:
+        return f"syntax error: line {error.lineno}: {error.msg}"
+    return "ok"
+
+
+@dagTools.tool_plain
+def compilePython(code: str) -> str:
+    """Check 2: compile the code to bytecode."""
+    ...
+
+
+@dagTools.tool_plain
+def checkDAGValid(code: str) -> str:
+    """Check 3: load the code as a real Airflow DAG with DagBag."""
+    ...
+```
+
+```python
+@task.agent(
+    llm_conn_id=LLM_CONN_ID,
+    system_prompt="Convert the pseudocode into a valid Airflow 3 DAG. Call checkAST, "
+                  "compilePython, checkDAGValid and fix errors until all three return 'ok'.",
+    toolsets=[dagTools],
+    output_type=GeneratedDag,
+    usage_limits=UsageLimits(request_limit=12, tool_calls_limit=20),
+)
+def generateDag(code: str) -> str:
+    return f"Convert this Blockly pseudocode into a real Airflow DAG:\n\n{code}"
+```
+
+After the agent returns, a plain `writeDag` task re-runs all three checks,
+extracts the `dag_id` with `ast`, requires it to start with `blockly_`, and
+writes the code to `<dags_folder>/blockly_<id>.py` (the folder comes from
+`conf.get("core", "dags_folder")`).
+
+Use `@toolset.tool_plain` for a plain function, or `@toolset.tool` when the first
+parameter is a `RunContext`. `usage_limits` bounds the loop so a non-converging
+agent fails instead of running forever; tool calls are logged by default
+(`enable_tool_logging=True`). Run it with:
 
 ```bash
-uv add -c constraints.txt llama-index-core llama-index-embeddings-google-genai
+uv run airflow dags test agent_tools_demo 2025-01-01
 ```
 
 ## HITL demo

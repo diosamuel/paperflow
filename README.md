@@ -34,14 +34,37 @@ npm run build
 For UI development, `npm run dev` serves the builder standalone at
 http://localhost:5173.
 
-## Vision API — `api/`
+## IoT API — `api/`
+
+Bridges the Pi's MQTT telemetry into HTTP/SSE and publishes LED commands back.
 
 ```bash
 cd api
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env         # then set GEMINI_API_KEY
+cp .env.example .env
 python main.py               # http://localhost:8000/docs
+```
+
+## Raspberry Pi — `mqtt/`
+
+`mqtt/post.py` runs on the Pi. It reads the DHT22 every 5s and publishes to
+`paperflow/sensor`, publishes button presses to `paperflow/sensor/buttons`, and
+drives the LEDs from `paperflow/actuator/{color}`.
+
+Pins (BCM numbering):
+
+| Component | Pin | Notes |
+|-----------|-----|-------|
+| DHT22 sensor (data) | GPIO 5 (`board.D5`) | temperature + humidity |
+| Red LED | GPIO 27 | |
+| Yellow LED | GPIO 22 | |
+| Green LED | GPIO 17 | |
+| Push button | GPIO 19 | internal pull-up |
+
+```bash
+pip install -r requirements.txt    # from the repo root (Pi + API deps)
+python mqtt/post.py
 ```
 
 ---

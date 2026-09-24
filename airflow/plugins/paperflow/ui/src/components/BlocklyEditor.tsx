@@ -13,7 +13,6 @@ import { pythonGenerator } from 'blockly/python'
 import hljs from 'highlight.js/lib/core'
 import python from 'highlight.js/lib/languages/python'
 
-import '../blocks/dagConfig'
 import { toolbox } from '../toolbox'
 
 hljs.registerLanguage('python', python)
@@ -87,7 +86,12 @@ export function BlocklyEditor({
 
     const saved = loadBlocklyState()
     if (saved) {
-      Blockly.serialization.workspaces.load(saved, workspace)
+      try {
+        Blockly.serialization.workspaces.load(saved, workspace)
+      } catch (error) {
+        console.warn('Discarding saved Blockly workspace:', error)
+        localStorage.removeItem(STORAGE_KEY_BLOCKLY)
+      }
     }
 
     onWorkspaceRef.current?.(workspace)

@@ -39,8 +39,7 @@ pythonGenerator.forBlock[LED_BLOCK] = (block) => {
 
   pythonGenerator.provideFunction_('set_led', [
     'def set_led(colour, state):',
-    '    # Turns one of the Raspberry Pi LEDs on or off.',
-    `    # set ${colour} LED to ${state}`,
+    '    # turn on led',
     '    pass',
   ])
 

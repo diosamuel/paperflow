@@ -33,7 +33,11 @@ import { pythonGenerator } from 'blockly/python'
 import { TASK_BLOCK, appendTaskBlock, slugify } from '../blocks/task'
 import { BlocklyEditor } from '../components/BlocklyEditor'
 import { ConfirmDialog } from '../components/ConfirmDialog'
-import { ResultDialog, type ValidationCheck } from '../components/ResultDialog'
+import {
+  ResultDialog,
+  type SaveState,
+  type ValidationCheck,
+} from '../components/ResultDialog'
 import { TaskNode, type TaskNodeType } from '../nodes/TaskNode'
 import {
   ImageNode,
@@ -42,6 +46,9 @@ import {
 } from '../nodes/ImageNode'
 
 const nodeTypes = { task: TaskNode, image: ImageNode }
+
+const API_BASE: string =
+  import.meta.env.VITE_API_BASE ?? 'http://localhost:8000'
 
 const COLUMN_GAP = 240
 
@@ -208,11 +215,12 @@ function resolveTaskBlockId(
 }
 
 function buildBlockNameMap(workspace: WorkspaceSvg): Map<string, string> {
-  return new Map(
-    workspace
-      .getAllBlocks(false)
-      .map((block) => [block.getFieldValue('NAME') as string, block.id]),
-  )
+  const map = new Map<string, string>()
+  for (const block of workspace.getAllBlocks(false)) {
+    const name = block.getFieldValue('NAME')
+    if (typeof name === 'string' && name) map.set(name, block.id)
+  }
+  return map
 }
 
 type FlowProps = {
@@ -404,6 +412,7 @@ function Builder() {
   const [validationChecks, setValidationChecks] = useState<
     ValidationCheck[] | null
   >(null)
+  const [saveState, setSaveState] = useState<SaveState | null>(null)
   const [nodes, setNodes, onNodesChange] = useNodesState(
     loadNodes() ?? initialNodes,
   )
@@ -448,7 +457,7 @@ function Builder() {
     [setEdges],
   )
 
-  const handleGenerateDag = useCallback(() => {
+  const handleGenerateDag = useCallback(async () => {
     const workspace = workspaceRef.current
     if (!workspace) return
 
@@ -508,6 +517,43 @@ function Builder() {
     }
 
     setValidationChecks(checks)
+
+    if (checks.length === 0 || !checks.every((check) => check.ok)) {
+      setSaveState(null)
+      return
+    }
+
+    const dagBlock = workspace
+      .getAllBlocks(false)
+      .find((block) => block.type === 'dag')
+    const dagName =
+      ((dagBlock?.getFieldValue('NAME') as string) || '').trim() ||
+      'paperflow_dag'
+
+    setSaveState({ status: 'saving', message: '' })
+
+    try {
+      const response = await fetch(`${API_BASE}/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: pythonGenerator.workspaceToCode(workspace),
+          filename: `${dagName}.py`,
+        }),
+      })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      const saved = (await response.json()) as { filename: string }
+      setSaveState({
+        status: 'saved',
+        message: `Saved blockly_dags/${saved.filename}`,
+      })
+    } catch (error) {
+      setSaveState({
+        status: 'error',
+        message: `Could not save: ${(error as Error).message}`,
+      })
+    }
   }, [edges, nodes])
 
   const handleWorkspace = useCallback((workspace: WorkspaceSvg | null) => {
@@ -747,8 +793,15 @@ function Builder() {
       <ResultDialog
         open={validationChecks !== null}
         checks={validationChecks ?? []}
-        onClose={() => setValidationChecks(null)}
-        onGenerate={() => setValidationChecks(null)}
+        save={saveState}
+        onClose={() => {
+          setValidationChecks(null)
+          setSaveState(null)
+        }}
+        onGenerate={() => {
+          setValidationChecks(null)
+          setSaveState(null)
+        }}
       />
     </div>
   )

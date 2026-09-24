@@ -16,8 +16,8 @@ Blockly.defineBlocksWithJsonArray([
 pythonGenerator.forBlock[TEMPERATURE_SENSOR_BLOCK] = () => {
   const name = pythonGenerator.provideFunction_('read_temperature', [
     'def read_temperature():',
-    '    # Reads the temperature (°C) from the Raspberry Pi sensor.',
-    '    return 0.0',
+    '    # read from raspberry pi dht22',
+    '    return temperature',
   ])
 
   return [`${name}()`, Order.FUNCTION_CALL]

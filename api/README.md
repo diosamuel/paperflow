@@ -1,6 +1,8 @@
-# PaperFlow Vision API
+# PaperFlow IoT API
 
-A simple FastAPI service that provides an `/upload` endpoint to receive an image, send it to Google Gemini Vision API, and return the analysis.
+A FastAPI service that bridges the Raspberry Pi over MQTT: it exposes the Pi's
+latest sensor and button readings over HTTP (plus a Server-Sent Events stream),
+and publishes LED commands back to the Pi.
 
 ---
 
@@ -8,8 +10,7 @@ A simple FastAPI service that provides an `/upload` endpoint to receive an image
 
 ```
 api/
-├── main.py              # FastAPI application & endpoints (/upload, /health, /iot/*)
-├── gemini_service.py    # Gemini Vision API integration
+├── main.py              # FastAPI application & endpoints (/, /health, /iot/*)
 ├── mqtt_bridge.py       # MQTT subscriber + last-value cache for Raspberry Pi telemetry
 ├── requirements.txt     # Python dependencies
 ├── .env.example         # Template for environment variables
@@ -31,26 +32,28 @@ pip install -r requirements.txt
 
 ### 2. Configure Environment Variables
 
-Copy `.env.example` to `.env` and configure your Gemini API Key:
+Copy `.env.example` to `.env`:
 
 ```bash
 cp .env.example .env
 ```
 
 Edit `.env`:
+
 ```env
-GEMINI_API_KEY=AIzaSy...your_gemini_api_key
-GEMINI_MODEL=gemini-2.5-flash
 HOST=0.0.0.0
 PORT=8000
 
 # MQTT bridge (must match mqtt/post.py on the Raspberry Pi)
 MQTT_HOST=broker.mqtt.cool
 MQTT_PORT=1883
+MQTT_USERNAME=
+MQTT_PASSWORD=
 MQTT_CLIENT_ID=paperflow-api
 MQTT_SENSOR_TOPIC=paperflow/sensor
 MQTT_BUTTONS_TOPIC=paperflow/sensor/buttons
 MQTT_ACTUATOR_PREFIX=paperflow/actuator
+MQTT_LED_COLORS=red,yellow,green
 MQTT_STALE_AFTER_SECONDS=15
 ```
 
@@ -68,34 +71,20 @@ python main.py
 
 ## 📡 API Endpoints
 
-### 1. `POST /upload`
-Uploads an image and gets Gemini Vision response.
-
-- **Request:** `multipart/form-data`
-  - `file` (required): Image file (`image/jpeg`, `image/png`, etc.)
-  - `prompt` (optional): Custom prompt string to instruct Gemini
-
-- **Example curl:**
-```bash
-curl -X POST "http://localhost:8000/upload" \
-  -F "file=@/path/to/workflow_paper.png" \
-  -F "prompt=Describe the nodes and connections drawn on this paper."
-```
-
-- **Example Response:**
-```json
-{
-  "status": "success",
-  "filename": "workflow_paper.png",
-  "content_type": "image/png",
-  "size_bytes": 104230,
-  "prompt": "Describe the nodes and connections drawn on this paper.",
-  "response": "The drawing contains 3 nodes: Start -> Step A -> End..."
-}
-```
+### 1. `GET /`
+Welcome message with links to the docs and health check.
 
 ### 2. `GET /health`
-Health check endpoint reporting configuration status, including MQTT broker connectivity.
+Health check endpoint reporting MQTT broker connectivity.
+
+- **Example response:**
+```json
+{
+  "status": "healthy",
+  "mqtt_connected": true,
+  "mqtt_broker": "broker.mqtt.cool:1883"
+}
+```
 
 ### 3. `GET /iot`
 Combined snapshot: latest sensor reading plus latest button state.
@@ -123,14 +112,37 @@ Latest button state published on `paperflow/sensor/buttons`.
 ### 6. `POST /iot/led/{color}`
 Publishes an actuator command to `paperflow/actuator/{color}` to switch a Raspberry Pi LED.
 
-- **Path:** `color` — `red`, `yellow`, or `green`
-- **Body:** `{ "on": true }`
+- **Path:** `color` — `red`, `yellow`, or `green` (lowercased; anything else returns `400`)
+- **Body (JSON):**
+  ```json
+  { "on": true }
+  ```
+  `on` is optional and defaults to `true`.
+
+  The JSON is the HTTP layer only. The bridge converts it to the string payload
+  the Pi expects, so `{"on": true}` publishes `on=true` and `{"on": false}`
+  publishes `on=false` on `paperflow/actuator/{color}` — which is exactly what
+  `mqtt/post.py` → `handleActuator` matches with `payload.lower()`. Returns `503`
+  if the MQTT broker is not connected.
 
 - **Example curl:**
 ```bash
 curl -X POST "http://localhost:8000/iot/led/red" \
   -H "Content-Type: application/json" \
   -d '{"on": true}'
+```
+
+- **Example response:**
+```json
+{
+  "status": "success",
+  "color": "red",
+  "on": true,
+  "topic": "paperflow/actuator/red",
+  "payload": "on=true",
+  "mid": 3,
+  "rc": 0
+}
 ```
 
 ### 7. `GET /iot/stream`
@@ -150,7 +162,33 @@ data: {"type": "message", "topic": "paperflow/sensor", "received_at": 1690000000
 
 This is what the builder's **Wiring** page sidebar consumes via `EventSource`.
 
-### 8. Interactive Swagger UI
+### 8. `POST /save`
+Writes Blockly-generated Python into the repo-root `blockly_dags/` folder, where
+`airflow/dags/agent_tools_demo.py` picks it up and has the LLM agent convert it
+into a real DAG.
+
+- **Body (JSON):**
+  ```json
+  {
+    "code": "def read_humidity():\n    # read from raspberry pi\n    return humidity\n",
+    "filename": "paperflow_dag.py"
+  }
+  ```
+  `filename` is sanitized to a bare `blockly*.py` name — directory components are
+  stripped and a `blockly-` prefix is added when missing, so `paperflow_dag.py`
+  is written as `blockly-paperflow_dag.py`. The folder can be redirected with
+  `BLOCKLY_DAGS_DIR`.
+
+- **Example response:**
+```json
+{
+  "status": "success",
+  "filename": "blockly-paperflow_dag.py",
+  "path": "/…/blockly_dags/blockly-paperflow_dag.py"
+}
+```
+
+### 9. Interactive Swagger UI
 Open your browser at:
 `http://localhost:8000/docs`
 
@@ -174,3 +212,5 @@ the Pi):
 
 Note: run a single API process (no `--workers`) — each worker would open its own
 MQTT connection and hold a separate cache.
+
+See the repository-root `README.md` for the Raspberry Pi pinout tables.

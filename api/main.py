@@ -2,15 +2,14 @@ import asyncio
 import json
 import os
 from contextlib import asynccontextmanager
-from typing import Optional
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from pathlib import Path
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 import uvicorn
 from dotenv import load_dotenv
 
-from gemini_service import callGeminiVision
 from mqtt_bridge import MqttBridge
 
 load_dotenv()
@@ -29,8 +28,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="PaperFlow Vision API",
-    description="FastAPI boilerplate for receiving images and analyzing them with Gemini Vision API.",
+    title="PaperFlow IoT API",
+    description="FastAPI service that bridges Raspberry Pi telemetry and LEDs over MQTT.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -48,7 +47,7 @@ app.add_middleware(
 @app.get("/")
 def getRoot():
     return {
-        "message": "Welcome to PaperFlow Vision API",
+        "message": "Welcome to PaperFlow IoT API",
         "docs_url": "/docs",
         "health_check": "/health",
     }
@@ -56,11 +55,8 @@ def getRoot():
 
 @app.get("/health")
 def getHealth():
-    gemini_key_set = bool(os.getenv("GEMINI_API_KEY") and os.getenv("GEMINI_API_KEY") != "your_gemini_api_key_here")
     return {
         "status": "healthy",
-        "gemini_api_key_configured": gemini_key_set,
-        "default_model": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         "mqtt_connected": bridge.isConnected(),
         "mqtt_broker": f"{bridge.host}:{bridge.port}",
     }
@@ -151,49 +147,34 @@ def setLed(color: str, command: LedCommand):
     }
 
 
-@app.post("/upload")
-async def uploadImage(
-    file: UploadFile = File(..., description="Image file to analyze"),
-    prompt: Optional[str] = Form(
-        None,
-        description="Optional custom prompt instructions for Gemini Vision",
-    ),
-):
-    # Validate content type
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type '{file.content_type}'. Please upload an image file (e.g. image/jpeg, image/png).",
-        )
+BLOCKLY_DIR = Path(
+    os.getenv("BLOCKLY_DAGS_DIR", Path(__file__).resolve().parent.parent / "blockly_dags")
+)
 
-    try:
-        # Read file contents
-        image_bytes = await file.read()
-        if not image_bytes:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
-        # Pass image to Gemini Vision API
-        response_text = callGeminiVision(
-            image_bytes=image_bytes,
-            mime_type=file.content_type,
-            prompt=prompt,
-        )
+class BlocklySource(BaseModel):
+    code: str
+    filename: str = "blockly_source.py"
 
-        return {
-            "status": "success",
-            "filename": file.filename,
-            "content_type": file.content_type,
-            "size_bytes": len(image_bytes),
-            "prompt": prompt or "Default prompt",
-            "response": response_text,
-        }
 
-    except ValueError as ve:
-        raise HTTPException(status_code=500, detail=str(ve))
-    except RuntimeError as re:
-        raise HTTPException(status_code=500, detail=str(re))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing image with Gemini: {str(e)}")
+def safeBlocklyName(raw: str) -> str:
+    """Reduce a client-supplied name to a plain ``blockly*.py`` file name."""
+    name = Path(raw.strip() or "blockly_source").name
+    if not name.endswith(".py"):
+        name = f"{name}.py"
+    if not name.startswith("blockly"):
+        name = f"blockly-{name}"
+    return name
+
+
+@app.post("/save")
+def saveBlocklySource(source: BlocklySource):
+    """Write Blockly-generated Python into blockly_dags/ for the Airflow agent to convert."""
+    name = safeBlocklyName(source.filename)
+    BLOCKLY_DIR.mkdir(parents=True, exist_ok=True)
+    path = BLOCKLY_DIR / name
+    path.write_text(source.code)
+    return {"status": "success", "filename": name, "path": str(path)}
 
 
 if __name__ == "__main__":

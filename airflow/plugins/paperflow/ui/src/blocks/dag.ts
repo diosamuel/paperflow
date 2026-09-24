@@ -1,9 +1,17 @@
 import * as Blockly from 'blockly'
 import { pythonGenerator } from 'blockly/python'
 
-import { SCHEDULE_OPTIONS } from './dagConfig'
-
 export const DAG_BLOCK = 'dag'
+
+export const SCHEDULE_OPTIONS = [
+  ['@daily', '@daily'],
+  ['@hourly', '@hourly'],
+  ['@weekly', '@weekly'],
+  ['@monthly', '@monthly'],
+  ['@yearly', '@yearly'],
+  ['@once', '@once'],
+  ['Cron * * * * *', '* * * * *'],
+]
 
 Blockly.defineBlocksWithJsonArray([
   {

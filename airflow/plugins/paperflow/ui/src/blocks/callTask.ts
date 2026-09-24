@@ -3,7 +3,6 @@ import { Order, pythonGenerator } from 'blockly/python'
 
 import { TASK_BLOCK } from './task'
 
-export const CALL_TASK_BLOCK = 'call_task'
 export const CALL_TASK_VALUE_BLOCK = 'call_task_value'
 
 const COLOR = '#7b3ff2'
@@ -31,22 +30,6 @@ Blockly.Extensions.register('callTaskOptions', function (this: Blockly.Block) {
 
 Blockly.defineBlocksWithJsonArray([
   {
-    type: CALL_TASK_BLOCK,
-    message0: 'call task %1',
-    args0: [
-      {
-        type: 'field_dropdown',
-        name: 'TASK',
-        options: [['(no tasks yet)', '']],
-      },
-    ],
-    previousStatement: null,
-    nextStatement: null,
-    colour: COLOR,
-    tooltip: 'Calls another task in this workflow.',
-    extensions: ['callTaskOptions'],
-  },
-  {
     type: CALL_TASK_VALUE_BLOCK,
     message0: 'result of task %1',
     args0: [
@@ -62,12 +45,6 @@ Blockly.defineBlocksWithJsonArray([
     extensions: ['callTaskOptions'],
   },
 ])
-
-pythonGenerator.forBlock[CALL_TASK_BLOCK] = (block) => {
-  const name = block.getFieldValue('TASK') as string
-  if (!name) return '# no task to call\n'
-  return `${name}()\n`
-}
 
 pythonGenerator.forBlock[CALL_TASK_VALUE_BLOCK] = (block) => {
   const name = block.getFieldValue('TASK') as string
