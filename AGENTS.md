@@ -120,7 +120,7 @@ Interactive docs: `http://localhost:8000/docs`. Endpoints: `GET /` (welcome),
 `GET /iot/buttons`, `GET /iot/leds` (last commanded LED state),
 `POST /iot/led/{color}` (publishes `on=true`/`on=false` to
 `paperflow/actuator/{color}`), `POST /iot/button` (publishes a press/release as the
-Pi would), `GET /iot/stream` (SSE push of every reading,
+Pi would **and triggers the newest DAG in `airflow/dags/`**), `GET /iot/stream` (SSE push of every reading,
 consumed by the builder's Wiring page), and `POST /save` (the builder writes its
 generated Python into repo-root `blockly_dags/`, then triggers the
 `auto_generate_dag` DAG via the Airflow API so the agent converts it).

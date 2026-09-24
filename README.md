@@ -1,6 +1,10 @@
+<div align="center">
+
 # PaperFlow
 
-![PaperFlow](./paperflow.jpg)
+**Draw it. Airflow runs it. The physical world responds.**
+
+<img src="./paperflow.jpg" alt="PaperFlow" width="420" />
 
 An educational project teaching kids workflow orchestration with Apache Airflow
 and a Raspberry Pi.
@@ -10,6 +14,23 @@ and a Raspberry Pi.
 **Config:** one root `.env` for everything — `cp .env.example .env`. `api/` and
 the builder UI load it automatically; export it before Airflow (`set -a;
 source .env; set +a`).
+
+</div>
+
+---
+
+## Architecture
+
+![PaperFlow architecture](./Architecture.png)
+
+1. **Draw** — kids build a workflow in the **Blockly** builder.
+2. **Generate** — the `@task.agent` LLM (`dag_id=auto_generate_dag`) reads the
+   pseudocode plus the system prompt and emits a real Airflow DAG, calling
+   `checkAST`, `compilePython` and `checkDAGValid` until all three pass.
+3. **Approve** — an `ApprovalOperator` gates the write: a human approves the
+   generated DAG before it lands in `dags/`.
+4. **Run** — Airflow runs the DAG, while the IoT API bridges the Pi's MQTT
+   telemetry and drives the LEDs.
 
 ---
 

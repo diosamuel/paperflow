@@ -355,6 +355,17 @@ type StreamEvent =
       data: Record<string, unknown>
     }
 
+type ButtonResult = {
+  detail?: string
+  published?: boolean
+  airflow?: {
+    triggered: boolean
+    dag_id?: string
+    dag_run_id?: string | null
+    error?: string
+  }
+}
+
 type LogEntry = {
   id: number
   time: string
@@ -378,34 +389,72 @@ export default function Wiring() {
   const logRef = useRef<HTMLDivElement>(null)
   const counterRef = useRef(0)
 
-  const pressButton = useCallback((pressed: boolean) => {
-    void fetch(`${API_BASE}/iot/button`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pressed }),
-    }).catch(() => {
-      // the API log already shows connectivity; nothing useful to surface here
-    })
+  const push = useCallback((entry: Omit<LogEntry, 'id' | 'time'>) => {
+    counterRef.current += 1
+    setEntries((prev) =>
+      [
+        ...prev,
+        {
+          id: counterRef.current,
+          time: new Date().toLocaleTimeString(),
+          ...entry,
+        },
+      ].slice(-MAX_LOG_ENTRIES),
+    )
   }, [])
+
+  const pressButton = useCallback(
+    (pressed: boolean) => {
+      void (async () => {
+        try {
+          const response = await fetch(`${API_BASE}/iot/button`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pressed }),
+          })
+          const payload = (await response
+            .json()
+            .catch(() => null)) as ButtonResult | null
+
+          if (!response.ok) {
+            push({
+              tone: 'info',
+              label: 'button',
+              detail: payload?.detail ?? `request failed (${response.status})`,
+            })
+            return
+          }
+
+          const airflow = payload?.airflow
+          if (airflow?.triggered) {
+            push({
+              tone: 'message',
+              label: 'dag triggered',
+              detail: [airflow.dag_id, airflow.dag_run_id].filter(Boolean).join('  '),
+            })
+          } else if (airflow) {
+            push({
+              tone: 'info',
+              label: 'dag not triggered',
+              detail: airflow.error ?? 'unknown error',
+            })
+          }
+        } catch (error) {
+          push({
+            tone: 'info',
+            label: 'button',
+            detail: error instanceof Error ? error.message : 'request failed',
+          })
+        }
+      })()
+    },
+    [push],
+  )
 
   const actions = useMemo(() => ({ pressButton }), [pressButton])
 
   useEffect(() => {
     const source = new EventSource(`${API_BASE}/iot/stream`)
-
-    const push = (entry: Omit<LogEntry, 'id' | 'time'>) => {
-      counterRef.current += 1
-      setEntries((prev) =>
-        [
-          ...prev,
-          {
-            id: counterRef.current,
-            time: new Date().toLocaleTimeString(),
-            ...entry,
-          },
-        ].slice(-MAX_LOG_ENTRIES),
-      )
-    }
 
     source.onopen = () => setStatus('live')
     source.onerror = () => setStatus('offline')
@@ -444,7 +493,7 @@ export default function Wiring() {
     }
 
     return () => source.close()
-  }, [])
+  }, [push])
 
   useEffect(() => {
     const container = logRef.current

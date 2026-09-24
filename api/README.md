@@ -162,7 +162,8 @@ same data rides on `/iot/stream`, both in the opening `snapshot` and as a
 
 ### 8. `POST /iot/button`
 Publishes a button press/release as the Raspberry Pi would — useful for demos with
-no hardware wired up.
+no hardware wired up. A **press also triggers the most recently created DAG**, so
+the breadboard button can start a workflow.
 
 - **Body (JSON):**
   ```json
@@ -170,8 +171,30 @@ no hardware wired up.
   ```
   Publishes `button=true` / `button=false` on `paperflow/sensor/buttons`. The
   broker echoes it back to the API's own subscription, so it lands in
-  `GET /iot/buttons` and in the SSE log exactly like a real press. Returns `503`
-  if the MQTT broker is not connected.
+  `GET /iot/buttons` and in the SSE log exactly like a real press.
+
+  On `pressed: true` the API then looks for the newest `*.py` in
+  `AIRFLOW_DAGS_DIR` (default `<repo>/airflow/dags`), skips `AIRFLOW_DAG_ID` (the
+  agent itself), reads the `dag_id` declared in the file — falling back to the file
+  name — and creates a DAG run for it.
+
+- **Response:** `published` reports whether the MQTT message went out, `airflow`
+  reports the trigger:
+  ```json
+  {
+    "status": "success",
+    "pressed": true,
+    "topic": "paperflow/sensor/buttons",
+    "payload": "button=True",
+    "published": true,
+    "airflow": {
+      "triggered": true,
+      "dag_id": "blockly_home_alert",
+      "dag_run_id": "manual__2026-09-24T20:41:07.482913+00:00"
+    }
+  }
+  ```
+  A disconnected broker only sets `published: false`; it does not stop the DAG run.
 
 ### 9. `GET /iot/stream`
 Server-Sent Events (SSE) stream. On connect it sends one `snapshot` event with the
