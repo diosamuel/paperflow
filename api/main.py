@@ -3,6 +3,8 @@ import json
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -12,7 +14,7 @@ from dotenv import load_dotenv
 
 from mqtt_bridge import MqttBridge
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 bridge = MqttBridge()
 
@@ -152,6 +154,14 @@ BLOCKLY_DIR = Path(
 )
 
 
+AIRFLOW_API_URL = os.getenv("AIRFLOW_API_URL", "http://localhost:8080")
+AIRFLOW_API_USERNAME = os.getenv("AIRFLOW_API_USERNAME", "admin")
+AIRFLOW_API_PASSWORD = os.getenv("AIRFLOW_API_PASSWORD", "admin")
+AIRFLOW_DAG_ID = os.getenv("AIRFLOW_DAG_ID", "agent_tools_demo")
+
+REQUEST_TIMEOUT = 5
+
+
 class BlocklySource(BaseModel):
     code: str
     filename: str = "blockly_source.py"
@@ -167,14 +177,42 @@ def safeBlocklyName(raw: str) -> str:
     return name
 
 
+def triggerAirflowDag() -> dict:
+    """Create a DAG run for the agent that turns the saved Blockly source into a real DAG."""
+    base = AIRFLOW_API_URL.rstrip("/")
+
+    token = requests.post(
+        f"{base}/auth/token",
+        json={"username": AIRFLOW_API_USERNAME, "password": AIRFLOW_API_PASSWORD},
+        timeout=REQUEST_TIMEOUT,
+    )
+    token.raise_for_status()
+
+    run = requests.post(
+        f"{base}/api/v2/dags/{AIRFLOW_DAG_ID}/dagRuns",
+        headers={"Authorization": f"Bearer {token.json()['access_token']}"},
+        json={"logical_date": None, "conf": {}},
+        timeout=REQUEST_TIMEOUT,
+    )
+    run.raise_for_status()
+    return run.json()
+
+
 @app.post("/save")
 def saveBlocklySource(source: BlocklySource):
-    """Write Blockly-generated Python into blockly_dags/ for the Airflow agent to convert."""
+    """Write Blockly-generated Python into blockly_dags/, then kick off the Airflow agent."""
     name = safeBlocklyName(source.filename)
     BLOCKLY_DIR.mkdir(parents=True, exist_ok=True)
     path = BLOCKLY_DIR / name
     path.write_text(source.code)
-    return {"status": "success", "filename": name, "path": str(path)}
+
+    try:
+        run = triggerAirflowDag()
+        airflow = {"triggered": True, "dag_run_id": run.get("dag_run_id")}
+    except Exception as error:
+        airflow = {"triggered": False, "error": f"{type(error).__name__}: {error}"}
+
+    return {"status": "success", "filename": name, "path": str(path), "airflow": airflow}
 
 
 if __name__ == "__main__":

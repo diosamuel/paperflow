@@ -13,7 +13,6 @@ api/
 ├── main.py              # FastAPI application & endpoints (/, /health, /iot/*)
 ├── mqtt_bridge.py       # MQTT subscriber + last-value cache for Raspberry Pi telemetry
 ├── requirements.txt     # Python dependencies
-├── .env.example         # Template for environment variables
 └── README.md            # Setup and usage guide
 ```
 
@@ -32,19 +31,23 @@ pip install -r requirements.txt
 
 ### 2. Configure Environment Variables
 
-Copy `.env.example` to `.env`:
+Configuration is centralised in the **repo-root `.env`**, shared with the Airflow
+DAGs and the builder UI. Create it once from the template:
 
 ```bash
+cd ..
 cp .env.example .env
 ```
 
-Edit `.env`:
+`main.py` loads that file explicitly, so the service picks it up no matter which
+directory you launch it from. The variables it reads:
 
 ```env
+# This file lives at the repo root, not in api/.
 HOST=0.0.0.0
 PORT=8000
 
-# MQTT bridge (must match mqtt/post.py on the Raspberry Pi)
+# MQTT bridge (must match mqtt/raspi.py on the Raspberry Pi)
 MQTT_HOST=broker.mqtt.cool
 MQTT_PORT=1883
 MQTT_USERNAME=
@@ -55,6 +58,12 @@ MQTT_BUTTONS_TOPIC=paperflow/sensor/buttons
 MQTT_ACTUATOR_PREFIX=paperflow/actuator
 MQTT_LED_COLORS=red,yellow,green
 MQTT_STALE_AFTER_SECONDS=15
+
+# Airflow API, used by POST /save to trigger the Blockly->DAG agent
+AIRFLOW_API_URL=http://localhost:8080
+AIRFLOW_API_USERNAME=admin
+AIRFLOW_API_PASSWORD=admin
+AIRFLOW_DAG_ID=agent_tools_demo
 ```
 
 ### 3. Run the API Server
@@ -122,7 +131,7 @@ Publishes an actuator command to `paperflow/actuator/{color}` to switch a Raspbe
   The JSON is the HTTP layer only. The bridge converts it to the string payload
   the Pi expects, so `{"on": true}` publishes `on=true` and `{"on": false}`
   publishes `on=false` on `paperflow/actuator/{color}` — which is exactly what
-  `mqtt/post.py` → `handleActuator` matches with `payload.lower()`. Returns `503`
+  `mqtt/raspi.py` → `handleActuator` matches with `payload.lower()`. Returns `503`
   if the MQTT broker is not connected.
 
 - **Example curl:**
@@ -174,17 +183,26 @@ into a real DAG.
     "filename": "paperflow_dag.py"
   }
   ```
-  `filename` is sanitized to a bare `blockly*.py` name — directory components are
-  stripped and a `blockly-` prefix is added when missing, so `paperflow_dag.py`
-  is written as `blockly-paperflow_dag.py`. The folder can be redirected with
-  `BLOCKLY_DAGS_DIR`.
+`filename` is sanitized to a bare `blockly*.py` name — directory components are
+stripped and a `blockly-` prefix is added when missing, so `paperflow_dag.py`
+is written as `blockly-paperflow_dag.py`. The folder can be redirected with
+`BLOCKLY_DAGS_DIR`.
+
+After writing, the endpoint **triggers the Airflow agent**: it authenticates to
+the Airflow API (`POST /auth/token`) and creates a DAG run
+(`POST /api/v2/dags/{AIRFLOW_DAG_ID}/dagRuns`), which rewrites the source into a
+real DAG. Configuration: `AIRFLOW_API_URL` (default `http://localhost:8080`),
+`AIRFLOW_API_USERNAME` / `AIRFLOW_API_PASSWORD` (default `admin` / `admin`),
+`AIRFLOW_DAG_ID` (default `agent_tools_demo`). A failed trigger does not fail the
+save — it is reported in `airflow`.
 
 - **Example response:**
 ```json
 {
   "status": "success",
   "filename": "blockly-paperflow_dag.py",
-  "path": "/…/blockly_dags/blockly-paperflow_dag.py"
+  "path": "/…/blockly_dags/blockly-paperflow_dag.py",
+  "airflow": { "triggered": true, "dag_run_id": "manual__2026-09-24T18:57:46.402385+00:00" }
 }
 ```
 
@@ -201,7 +219,7 @@ client (started with the app's lifespan) that subscribes to the Raspberry Pi's
 topics and keeps only the **latest** message in memory. The `/iot/*` endpoints then
 read that cache — so "polling" happens over HTTP.
 
-Topics and payloads mirror `mqtt/post.py` (the reference implementation running on
+Topics and payloads mirror `mqtt/raspi.py` (the reference implementation running on
 the Pi):
 
 | Direction | Topic | Payload |

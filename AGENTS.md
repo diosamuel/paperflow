@@ -39,8 +39,7 @@ paperflow/
 │   ├── main.py             # /, /health, /iot, /iot/sensor, /iot/buttons, /iot/led/{color}, /iot/stream
 │   ├── mqtt_bridge.py      # paho subscriber + last-value cache for Pi telemetry
 │   ├── requirements.txt
-│   ├── README.md
-│   └── .env.example
+│   └── README.md
 ├── airflow/                # uv-managed Airflow 3.3.2 (LocalExecutor + SQLite)
 │   ├── pyproject.toml      # dependencies: apache-airflow==3.3.2
 │   ├── uv.lock             # resolved/pinned environment
@@ -72,7 +71,8 @@ paperflow/
 ├── DESIGN.md               # token palette + landing-page spec
 ├── PLAN.md                 # roadmap (⚠️ gitignored — see note below)
 ├── README.md               # stub, currently stale (see §9)
-└── .env                    # leftover `AIRFLOW_UID=1000` (gitignored — see §6)
+├── .env.example            # central config template (tracked)
+└── .env                    # your config, gitignored — `cp .env.example .env`
 ```
 
 > ⚠️ `PLAN.md` is listed in `.gitignore`. Do **not** overwrite it destructively;
@@ -109,9 +109,10 @@ Airflow.
 cd api
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
 python main.py                # or: uvicorn main:app --reload --port 8000
 ```
+
+Configuration comes from the repo-root `.env`, which `main.py` loads explicitly.
 
 Interactive docs: `http://localhost:8000/docs`. Endpoints: `GET /` (welcome),
 `GET /health` (MQTT connectivity), `GET /iot` (combined sensor + button snapshot),
@@ -119,12 +120,13 @@ Interactive docs: `http://localhost:8000/docs`. Endpoints: `GET /` (welcome),
 `GET /iot/buttons`, `POST /iot/led/{color}` (publishes `on=true`/`on=false` to
 `paperflow/actuator/{color}`), `GET /iot/stream` (SSE push of every reading,
 consumed by the builder's Wiring page), and `POST /save` (the builder writes its
-generated Python into repo-root `blockly_dags/`).
+generated Python into repo-root `blockly_dags/`, then triggers the
+`agent_tools_demo` DAG via the Airflow API so the agent converts it).
 
 `mqtt_bridge.py` runs one paho client with the app's lifespan (started in
 `main.py`), subscribing to `paperflow/sensor` and `paperflow/sensor/buttons` and
 caching only the latest message in memory; the `/iot/*` endpoints read that cache.
-Topics and payloads mirror `mqtt/post.py` on the Pi. Run a **single** API process
+Topics and payloads mirror `mqtt/raspi.py` on the Pi. Run a **single** API process
 (no `--workers`) — each worker would hold its own MQTT connection and cache.
 Requires `paho-mqtt` (see `api/requirements.txt`).
 
@@ -274,8 +276,11 @@ and can be overridden with the `VITE_API_BASE` env var at build time.
 - **Pass `-c constraints.txt` when adding Airflow dependencies**
   (`uv add -c constraints.txt ...`), or the environment drifts off the tested
   Airflow 3.3.2 release.
-- **Root `.env` is a leftover** (`AIRFLOW_UID=1000`) from the removed compose
-  stack; nothing reads it now. It is gitignored, so it is safe to delete.
+- **Config is centralised in the repo-root `.env`** (template `.env.example`).
+  `api/main.py` loads it explicitly and Vite reads it via `envDir`, so both work
+  regardless of the working directory. **Airflow does not load `.env`** — DAGs
+  read `PAPERFLOW_*` from the process env, so run `set -a; source .env; set +a`
+  before `airflow standalone` to override the built-in defaults.
 - The repo has been through a teardown: `graphify-out/` is a generated artifact,
   and the root `README.md` still documents the old Airflow commands (see §9).
 

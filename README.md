@@ -1,11 +1,15 @@
 # PaperFlow
 
-Draw it. Airflow runs it. The physical world responds.
+![PaperFlow](./paperflow.jpg)
 
 An educational project teaching kids workflow orchestration with Apache Airflow
 and a Raspberry Pi.
 
 **Needs:** Node 20+, Python 3.12+, and [uv](https://docs.astral.sh/uv/).
+
+**Config:** one root `.env` for everything — `cp .env.example .env`. `api/` and
+the builder UI load it automatically; export it before Airflow (`set -a;
+source .env; set +a`).
 
 ---
 
@@ -42,13 +46,12 @@ Bridges the Pi's MQTT telemetry into HTTP/SSE and publishes LED commands back.
 cd api
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
 python main.py               # http://localhost:8000/docs
 ```
 
 ## Raspberry Pi — `mqtt/`
 
-`mqtt/post.py` runs on the Pi. It reads the DHT22 every 5s and publishes to
+`mqtt/raspi.py` runs on the Pi. It reads the DHT22 every 5s and publishes to
 `paperflow/sensor`, publishes button presses to `paperflow/sensor/buttons`, and
 drives the LEDs from `paperflow/actuator/{color}`.
 
@@ -64,7 +67,7 @@ Pins (BCM numbering):
 
 ```bash
 pip install -r requirements.txt    # from the repo root (Pi + API deps)
-python mqtt/post.py
+python mqtt/raspi.py
 ```
 
 ---
