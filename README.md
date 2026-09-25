@@ -4,7 +4,7 @@
 
 **Draw it. Airflow runs it. The physical world responds.**
 
-<img src="./paperflow.jpg" alt="PaperFlow" width="420" />
+<img src="./paperflow.jpg" alt="PaperFlow"/>
 
 An educational project teaching kids workflow orchestration with Apache Airflow
 and a Raspberry Pi.
